@@ -5,7 +5,7 @@ import 'models/diagnostic.dart';
 import 'models/error_code.dart';
 import 'models/sign_result.dart';
 
-/// Method channel shared with `SignosoftSignerPlugin` on iOS.
+/// Method channel shared with `SignosoftSignerPlugin` on iOS and Android.
 const MethodChannel signosoftSignerChannel = MethodChannel(
   'com.signosoft.signer',
 );
@@ -53,7 +53,7 @@ class SignerChannel {
       return const Failed(
         SignosoftErrorCode.notRegistered,
         'The Signosoft signer plugin is not registered in this app. '
-        'Rebuild the iOS app after adding the dependency.',
+        'Rebuild the native app after adding the dependency.',
       );
     } finally {
       if (onDiagnostic != null) {

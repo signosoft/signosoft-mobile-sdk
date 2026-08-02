@@ -125,8 +125,25 @@ void main() {
     expect((result as Failed).code, SignosoftErrorCode.invalidToken);
   });
 
-  test('a non-iOS platform fails instead of throwing', () async {
+  test('android reaches the plugin', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    var invoked = false;
+    mockPlugin((call) async {
+      invoked = true;
+      return {'status': 'cancelled'};
+    });
+
+    final result = await SignosoftSigner.open(
+      token: 'bioid-123',
+      baseUrl: _baseUrl,
+    );
+
+    expect(invoked, isTrue);
+    expect(result, isA<Cancelled>());
+  });
+
+  test('a platform without a signer fails instead of throwing', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     var invoked = false;
     mockPlugin((call) async {
       invoked = true;

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Development only, and the Android mirror of NSAllowsLocalNetworking: it lets
+  the signer reach a shell served over plain HTTP on this machine or the local
+  network. A production baseUrl is https:// and needs none of this — delete the
+  file and the android:networkSecurityConfig attribute along with it.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

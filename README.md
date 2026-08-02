@@ -3,7 +3,7 @@
 Open the Signosoft signature ceremony **inside** your app and get a typed result
 back. The patient never leaves your UI and never sees a browser.
 
-iOS and iPadOS only in this phase.
+iOS, iPadOS and Android.
 
 ```
 Your Flutter app
@@ -12,7 +12,8 @@ Your Flutter app
       ▼
 signosoft_signer   Flutter plugin (Dart API)
       │
-SignosoftSigner    Swift core (SwiftPM, hosts a WKWebView)
+      ├── SignosoftSigner   Swift core (SwiftPM, hosts a WKWebView)
+      └── SignosoftSigner   Kotlin core (Gradle, hosts a WebView)
       │
       ▼
 Signosoft signing shell  ──►  Signosoft REST API
@@ -24,11 +25,13 @@ Signosoft signing shell  ──►  Signosoft REST API
 |---|---|---|
 | `signosoft_signer/` | Flutter plugin — the Dart API | Flutter apps |
 | `ios/` | Swift core — `SignosoftSigner`, a SwiftPM package | native iOS apps |
+| `android/` | Kotlin core — `signosoft-signer`, a Gradle library | native Android apps |
 | `examples/medicly/` | reference host app — patient view, PDF, Sign button | you, first |
 | `docs/` | getting started, and the full integration guide | you, first |
 
-**Both directories must stay side by side.** The plugin reaches the Swift core
-through a relative symlink; moving or splitting them breaks the build. See
+**The directories must stay side by side.** The plugin reaches the Swift core
+through a relative symlink and the Kotlin core through a relative source
+directory; moving or splitting them breaks the build. See
 [docs/INTEGRATION.md](docs/INTEGRATION.md#why-both-packages-ship-together).
 
 ## Install
@@ -42,7 +45,7 @@ dependencies:
   signosoft_signer:
     git:
       url: git@github.com:signosoft/signosoft-mobile-sdk.git
-      ref: v0.3.0-alpha
+      ref: v0.4.0-alpha
       path: signosoft_signer
 ```
 
@@ -58,10 +61,12 @@ URL with the token in it.
 **Always pin `ref` to a tag.** Tracking `main` means your build changes without
 you asking it to.
 
-Your app needs an **iOS 16.0** deployment target and a few `Info.plist` keys —
-both covered in [docs/INTEGRATION.md](docs/INTEGRATION.md).
+Your app needs an **iOS 16.0** deployment target, **Android API 24**, and a few
+`Info.plist` keys and Android manifest permissions — all covered in
+[docs/INTEGRATION.md](docs/INTEGRATION.md).
 
 Native iOS apps add `ios/` as a local Swift package and `import SignosoftSigner`.
+Native Android apps add `android/signosoft-signer` as a Gradle module.
 
 ## Use it
 
@@ -105,6 +110,23 @@ SignosoftSigner.present(from: self, token: bioid, baseURL: url) { result in
 SwiftUI: `SignosoftSignerSheet` inside a `.fullScreenCover`. It deliberately
 does **not** dismiss itself — the caller owns presentation state.
 
+Native Kotlin:
+
+```kotlin
+private val signer = registerForActivityResult(SignosoftSignerContract()) { result ->
+    when (result) {
+        is SignosoftSignerResult.Signed -> result.info.documentToken
+        is SignosoftSignerResult.Rejected -> …
+        SignosoftSignerResult.Cancelled -> …
+        is SignosoftSignerResult.Failed -> result.code  // a SignosoftErrorCode
+    }
+}
+
+signer.launch(SignosoftSignerRequest(token = bioid, baseUrl = shell))
+```
+
+Compose consumes the same contract through `rememberLauncherForActivityResult`.
+
 ## Where the signed PDF comes from
 
 Two routes, and you should design for the first:
@@ -114,9 +136,9 @@ Two routes, and you should design for the first:
    credentials. This is the supported route and the only one that works for
    documents of any size.
 2. **`signedPdfPath`** — a copy the SDK writes into the app's temporary
-   directory, for "attach to the chart right now". It is **null** when the
-   document could not be fetched or exceeds 32 MB. A null path never means the
-   signature failed.
+   directory (the cache directory on Android), for "attach to the chart right
+   now". It is **null** when the document could not be fetched or exceeds 32 MB.
+   A null path never means the signature failed.
 
 `downloadUrl` exists on the result type and is **always null today** — the
 backend does not mint one yet. Never show `documentToken` to a user or put it in
@@ -132,7 +154,7 @@ a URL: it is an identifier, not a link.
   limitations.
 - [examples/medicly/](examples/medicly/) — the reference host app, and the
   fastest way to see the whole flow working.
-- `signosoft_signer/CHANGELOG.md`, `ios/CHANGELOG.md`.
+- `signosoft_signer/CHANGELOG.md`, `ios/CHANGELOG.md`, `android/CHANGELOG.md`.
 
 ## Status
 
@@ -144,8 +166,10 @@ redistribution.
 so there is nothing to point the SDK at until Signosoft gives you a URL. Ask for
 it before you plan integration milestones.
 
+**Android is newer and much less verified than iOS** — it compiles and its unit
+tests pass, but the ceremony has never been displayed on an emulator or a device.
 [Known limitations](docs/INTEGRATION.md#known-limitations) lists honestly what is
-verified and what is not.
+verified and what is not, per platform.
 
 Bugs and questions: **info@signosoft.com**. Include the `SignosoftErrorCode`,
 the `documentToken` if you have one, and the diagnostic log described in the

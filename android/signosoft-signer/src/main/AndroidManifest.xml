@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The activity is named in full rather than relatively: the Flutter
+         plugin module reuses this same manifest under its own namespace. -->
+    <application>
+        <activity
+            android:name="com.signosoft.signer.SignosoftSignerActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|uiMode|density|fontScale|locale|layoutDirection" />
+    </application>
+
+</manifest>

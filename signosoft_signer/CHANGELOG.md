@@ -1,5 +1,43 @@
 # Changelog — signosoft_signer (Flutter)
 
+## 0.4.0-alpha
+
+Android. **No API change** — every 0.3 call site compiles unmodified, and the
+result types, error codes and diagnostics are identical on both platforms.
+
+### Added
+
+- **Android support.** `open()` no longer returns `unsupportedPlatform` on
+  Android; it opens the same ceremony against a new Kotlin core in `android/`.
+  See `android/CHANGELOG.md` for what that core does and does not do.
+- The plugin's Android module compiles the Kotlin core out of the sibling
+  `android/` directory through a Gradle source directory — the counterpart of
+  the symlink iOS uses, and just as dependent on the two staying siblings.
+- Android platform folders for both example apps, with the `CAMERA` and
+  `RECORD_AUDIO` declarations and the development network security config that
+  mirror their `Info.plist` keys.
+- Continuous integration for Android on a Linux runner: Kotlin core tests, a
+  debug APK of the Medicly example — the check that exercises the plugin, the
+  shared source directory and the merged manifest the way a customer's build
+  does — and the plugin's own Android unit tests.
+
+### Changed
+
+- `unsupportedPlatform` now means "not iOS and not Android".
+- `noPresenter` covers a missing activity as well as a missing view controller.
+- Documentation is per platform throughout: §2 of the integration guide covers
+  Android manifest permissions alongside `Info.plist`, and Known limitations
+  separates what is verified on iOS from the much shorter Android list.
+
+### Still open
+
+- **The signing shell is not hosted.** `baseUrl` stays required.
+- **Android has never been run.** It compiles and its unit tests pass; the
+  ceremony has not been displayed on an emulator or a device, and the shell's
+  `window.SignosoftAndroid` branch has never been exercised.
+- `downloadUrl` remains null; fetch the PDF server-side with `documentToken`.
+- `Rejected` is unit-tested on every layer but never exercised end to end.
+
 ## 0.3.0-alpha
 
 Distribution release. **No API change** — every 0.2 call site compiles unmodified.

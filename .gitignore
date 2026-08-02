@@ -11,6 +11,9 @@ pubspec.lock
 **/ios/Flutter/Generated.xcconfig
 **/ios/Flutter/flutter_export_environment.sh
 .flutter-plugins-dependencies
+.gradle/
+.cxx/
+local.properties
 
 # The example apps' build trees are symlinks out to ~/.flutter-build when the
 # checkout sits under an iCloud-synced directory — codesign rejects every

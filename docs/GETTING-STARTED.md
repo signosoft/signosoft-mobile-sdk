@@ -44,10 +44,11 @@ Your backend ──createDocLink──► Signosoft ──bioid──► your ap
 
 ## Five-minute integration
 
-1. Deployment target **iOS 16.0**; Flutter **3.44** or newer.
+1. Deployment target **iOS 16.0** / **Android API 24**; Flutter **3.44** or
+   newer.
 2. Add the dependency (see the [README](../README.md#install)).
-3. Add the `Info.plist` keys from
-   [INTEGRATION.md](INTEGRATION.md#2-hostinfoplist).
+3. Add the `Info.plist` keys and Android manifest permissions from
+   [INTEGRATION.md](INTEGRATION.md#2-host-permissions).
 4. Fetch a `bioid` from your backend.
 5. Call `SignosoftSigner.open(token: bioid, baseUrl: ...)` and switch on the
    four outcomes.
@@ -56,8 +57,9 @@ Your backend ──createDocLink──► Signosoft ──bioid──► your ap
 
 Two runnable versions ship with the SDK:
 
-- `examples/medicly/` — a realistic iPad host app: patient, report, Sign button,
-  the signed PDF rendered on return. Start here.
+- `examples/medicly/` — a realistic tablet host app: patient, report, Sign
+  button, the signed PDF rendered on return. Builds for iOS and Android. Start
+  here.
 - `signosoft_signer/example/` — the bare minimum: two text fields and the four
   outcomes, with nothing else in the way.
 
@@ -77,7 +79,7 @@ Two runnable versions ship with the SDK:
 - the `SignosoftErrorCode` and message, or the outcome you got and expected
 - the `documentToken` (safe to share — unlike the `bioid`)
 - the diagnostic log: pass `onDiagnostic` to `open()` and include what it printed
-- iOS version, device or simulator model, Flutter version
+- iOS or Android version, device / simulator / emulator model, Flutter version
 
 ## Where to go next
 

@@ -1,8 +1,9 @@
 /// Signosoft Mobile SDK — open the Signosoft signature ceremony inside your
 /// Flutter app and get a typed result back.
 ///
-/// iOS only in this phase. See the integration guide shipped alongside this
-/// package for the `Info.plist` keys your app must declare.
+/// iOS and Android. See the integration guide shipped alongside this package
+/// for the `Info.plist` keys and Android manifest permissions your app must
+/// declare.
 library;
 
 export 'src/models/diagnostic.dart';

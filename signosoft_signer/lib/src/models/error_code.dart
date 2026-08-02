@@ -23,13 +23,13 @@ enum SignosoftErrorCode {
   /// A signing session is already on screen.
   alreadyOpen,
 
-  /// No view controller was available to present from.
+  /// No view controller or activity was available to present from.
   noPresenter,
 
-  /// This platform has no Signosoft signer. iOS only in this phase.
+  /// This platform has no Signosoft signer. iOS and Android only.
   unsupportedPlatform,
 
-  /// The iOS plugin is not registered in the host app.
+  /// The native plugin is not registered in the host app.
   notRegistered,
 
   /// Anything not covered above.

@@ -1,8 +1,8 @@
 # Integration guide
 
-Everything needed to ship the Signosoft Mobile SDK in a production iOS or iPadOS
-app. If you are starting cold, read [GETTING-STARTED.md](GETTING-STARTED.md)
-first.
+Everything needed to ship the Signosoft Mobile SDK in a production iOS, iPadOS
+or Android app. If you are starting cold, read
+[GETTING-STARTED.md](GETTING-STARTED.md) first.
 
 ---
 
@@ -11,20 +11,25 @@ first.
 | | Minimum | Notes |
 |---|---|---|
 | iOS / iPadOS | **16.0** | the SDK uses `WKUIDelegate` media-capture APIs introduced in 15/16 without availability guards |
+| Android | **API 24** (7.0) | Flutter's own floor; `compileSdk` 36 |
 | Flutter | **3.44** | the plugin resolves its iOS side through Swift Package Manager, on by default from 3.44 |
 | Dart | **3.12** | sealed classes and pattern matching |
 | Xcode | 15 or newer | Swift tools 5.9 |
+| Android Gradle plugin | **9.0.1** | with Gradle 9.1 and Kotlin 2.3.20 — what Flutter 3.44 generates |
+| JDK | **17** | required by AGP 9 |
 
 These floors are what the package needs. It has been **built and exercised only
-on Flutter 3.44.8 / Dart 3.12.2 / Xcode 26.6**; lower versions inside the stated
-ranges are untested.
+on Flutter 3.44.8 / Dart 3.12.2 / Xcode 26.6 / AGP 9.0.1**; lower versions inside
+the stated ranges are untested.
 
 **CocoaPods is not supported.** See
 [Known limitations](#known-limitations).
 
 ---
 
-## 2. Host `Info.plist`
+## 2. Host permissions
+
+### iOS — `Info.plist`
 
 The SDK cannot declare usage strings on your behalf — iOS attributes them to the
 host app. Without them, the matching signature methods fail silently inside the
@@ -51,11 +56,39 @@ Write real sentences — App Review rejects placeholders.
 The SDK answers WebKit's media-capture request with `.prompt`, so iOS shows the
 standard permission alert the first time a signature method needs the camera.
 
-### App Transport Security
+### Android — manifest
 
-An `https://` `baseUrl` needs **no ATS changes** — this is the production case.
+Same rule, different mechanism: Android attributes permissions to the host app,
+so the SDK's own manifest declares none. Add what your tenant's signature
+methods need to `android/app/src/main/AndroidManifest.xml`:
 
-For local development against a plain-HTTP shell:
+| Permission | Needed for |
+|---|---|
+| `android.permission.CAMERA` | photo / scan signature methods, identity verification |
+| `android.permission.RECORD_AUDIO` | identity verification that records video |
+
+```xml
+<uses-permission android:name="android.permission.CAMERA"/>
+<uses-permission android:name="android.permission.RECORD_AUDIO"/>
+```
+
+Android has no equivalent of iOS's WebView permission prompt: a web origin
+cannot be granted a capability the app itself does not hold. So when the shell
+asks for the camera, the SDK requests the runtime permission from the user and
+grants the origin only if that succeeds — and only ever to `baseUrl`'s own
+origin. **A permission you did not declare comes back denied with no UI at all**,
+and the signature method fails silently inside the WebView.
+
+No storage permission is needed. Picking an existing signature image goes
+through the system document picker, and the signed PDF is written to your app's
+own cache directory.
+
+### Cleartext HTTP
+
+An `https://` `baseUrl` needs **no changes on either platform** — this is the
+production case.
+
+For local development against a plain-HTTP shell, on iOS:
 
 ```xml
 <key>NSAppTransportSecurity</key>
@@ -66,6 +99,22 @@ That covers `localhost` and private IP ranges without opening arbitrary cleartex
 loads. It does **not** cover an `http://` public hostname — ATS blocks those and
 the SDK reports `loadFailed` with WebKit's "requires the use of a secure
 connection" message.
+
+Android blocks cleartext the same way. The equivalent is a network security
+config — `android/app/src/main/res/xml/network_security_config.xml`, referenced
+from the manifest's `<application android:networkSecurityConfig="…">`:
+
+```xml
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>
+```
+
+`10.0.2.2` is the host machine as seen from the Android emulator. Both examples
+in this repository ship this file; delete it for a production build.
 
 ---
 
@@ -78,7 +127,7 @@ dependencies:
   signosoft_signer:
     git:
       url: git@github.com:signosoft/signosoft-mobile-sdk.git
-      ref: v0.3.0-alpha        # always a tag, never `main`
+      ref: v0.4.0-alpha        # always a tag, never `main`
       path: signosoft_signer
 ```
 
@@ -99,30 +148,38 @@ cannot reach GitHub, ask Signosoft.
 
 ### Why both packages ship together
 
-However you obtain it, the repository holds two directories that must remain
+However you obtain it, the repository holds directories that must remain
 siblings:
 
 ```
 signosoft-mobile-sdk/
   signosoft_signer/    Flutter plugin  ← your pubspec points here
   ios/                 Swift core
+  android/             Kotlin core
   examples/medicly/    reference host app
 ```
 
-Inside the plugin, `ios/signosoft_signer/SignosoftSignerCore` is a **symlink to
-`../../../ios`** — the sibling directory. That is deliberate: there is exactly
-one copy of the Swift core on disk, and both the Flutter plugin and native iOS
-consumers use it.
+There is exactly one copy of each native core on disk, and both the Flutter
+plugin and native consumers use it. The two platforms reach it differently
+because their build systems do:
 
-The symlink lives *inside* the plugin package because Flutter copies the whole
-plugin package into `ios/Flutter/ephemeral/Packages/.packages/` before building,
-and Swift Package Manager resolves relative dependency paths against that
-relocated location. A dependency path that climbed out of the package root would
-resolve into `ephemeral/` and fail.
+**iOS — a symlink.** `signosoft_signer/ios/signosoft_signer/SignosoftSignerCore`
+points at `../../../ios`. It lives *inside* the plugin package because Flutter
+copies the whole plugin package into `ios/Flutter/ephemeral/Packages/.packages/`
+before building, and Swift Package Manager resolves relative dependency paths
+against that relocated location. A dependency path that climbed out of the
+package root would resolve into `ephemeral/` and fail.
+
+**Android — a source directory.** `signosoft_signer/android/build.gradle.kts`
+adds `../../android/signosoft-signer/src/main/kotlin` to its source set and uses
+that module's `AndroidManifest.xml` (which is why the signing activity is named
+in full there). Gradle builds the plugin where it lies and happily compiles
+sources from outside the project root, so no symlink is needed — but the
+relative path is just as load-bearing.
 
 Consequences for you:
 
-- Keep the two directories together, at the same relative depth.
+- Keep the directories together, at the same relative depth.
 - Obtain the tree with a tool that preserves symlinks. Git stores them as mode
   `120000` and `git clone` restores them, so the `git:` dependency is safe;
   `git archive`, GitHub's "Download ZIP" and some GUI clients dereference the
@@ -135,6 +192,29 @@ Check the link survived:
 ls -l signosoft-mobile-sdk/signosoft_signer/ios/signosoft_signer/SignosoftSignerCore
 # -> ../../../ios          (and `cat .../SignosoftSignerCore/Package.swift` works)
 ```
+
+### Native Android hosts
+
+A non-Flutter Android app consumes the Kotlin core as a local Gradle module —
+there is no published artifact:
+
+```kotlin
+// settings.gradle.kts
+include(":signosoft-signer")
+project(":signosoft-signer").projectDir =
+    file("../signosoft-mobile-sdk/android/signosoft-signer")
+```
+
+```kotlin
+// app/build.gradle.kts
+dependencies {
+    implementation(project(":signosoft-signer"))
+}
+```
+
+The module pins its own AGP and Kotlin versions, so it builds the same way
+whether your app or the standalone build in `android/` drives it. That
+standalone build exists for `./gradlew test`; your app does not use it.
 
 ---
 
@@ -197,9 +277,9 @@ change.
 | `loadTimeout` | reached but never became ready inside `loadTimeout` | host accepts connections but never responds |
 | `sessionFailed` | shell loaded, session could not be established | expired, already-used or unknown `bioid` |
 | `alreadyOpen` | a ceremony is already on screen | double tap |
-| `noPresenter` | no view controller to present from | called before the UI existed |
-| `unsupportedPlatform` | not iOS | Android / web build |
-| `notRegistered` | plugin missing from the build | dependency added without rebuilding iOS |
+| `noPresenter` | no view controller or activity to present from | called before the UI existed |
+| `unsupportedPlatform` | not iOS and not Android | web / desktop build |
+| `notRegistered` | plugin missing from the build | dependency added without rebuilding the native app |
 | `unknown` | anything else, including codes from a newer SDK | — |
 
 ---
@@ -214,17 +294,20 @@ multi-document envelopes) with your credentials, and files the PDF.
 a URL and never show it to a user.
 
 **The convenience route:** `signedPdfPath` is the finished PDF written into your
-app's temporary directory, so you can attach it to a chart immediately.
+app's temporary directory — the cache directory on Android — so you can attach it
+to a chart immediately.
 
 1. **It is best-effort.** Null when the fetch failed or the document exceeded the
    size ceiling. A null path never means the signature failed.
-2. **It is temporary.** Copy it somewhere durable before relying on it; iOS may
-   reclaim the temp directory.
+2. **It is temporary.** Copy it somewhere durable before relying on it; both
+   platforms may reclaim these directories under storage pressure.
 3. **There is a 32 MB ceiling** on the decoded document. Above it the signature
    still succeeds and `signedPdfPath` is null. The bytes cross the JS→native
    bridge inside a single message; measured on an iPad Pro 13", a 50 MB document
    was delivered intact in about a second, so the ceiling is a memory guard on
-   our side rather than a bridge limit.
+   our side rather than a bridge limit. The same ceiling applies on Android,
+   where the transfer has **not** been measured — Android carries the payload as
+   a string across `@JavascriptInterface` rather than through WebKit.
 
 `downloadUrl` is modelled end to end and is **always null today** — no backend
 design has been chosen for minting one. There is no `downloadSignedPdf()` helper
@@ -256,7 +339,8 @@ signosoft: signed {documentToken: contr-…, signaturesSigned: 2.0,
 
 The signed PDF bytes are replaced by `pdfBase64Length`, so diagnostics stay
 cheap to log. Native hosts get the same tap via
-`SignosoftSignerViewController.onEvent`.
+`SignosoftSignerViewController.onEvent` on iOS and `SignosoftSignerRequest`'s
+`onDiagnostic` on Android.
 
 ---
 
@@ -267,19 +351,21 @@ cheap to log. Native hosts get the same tap via
 | Blank white screen, nothing happens | `baseUrl` reachable but not a signing shell, or the page never became interactive | wait for `loadTimeout` — you will get `loadTimeout`. Check `baseUrl` points at the **root** of the shell |
 | `loadFailed`, "answered HTTP 500" | `baseUrl` points at a misconfigured or wrong host | verify the URL in a browser; `<host>/?bioid=<token>` must render the ceremony |
 | `loadFailed`, "requires the use of a secure connection" | ATS blocked a cleartext load to a non-local host | use `https://`, or `NSAllowsLocalNetworking` for local development only |
-| `loadFailed`, "Could not connect to the server" | nothing listening on that host/port | check the shell is running and reachable **from the device**, not just the Mac |
+| `loadFailed`, "net::ERR_CLEARTEXT_NOT_PERMITTED" | the Android equivalent — cleartext to a host the network security config does not allow | use `https://`, or add the host for local development only |
+| `loadFailed`, "Could not connect to the server" | nothing listening on that host/port | check the shell is running and reachable **from the device**, not just the Mac. From the Android emulator the host machine is `10.0.2.2`, never `localhost` |
 | `sessionFailed`, "The document link is invalid" | the `bioid` is expired, already used, or unknown | mint a fresh token. Each token allows one terminal outcome |
-| `notRegistered` | plugin not in the iOS build | `flutter clean && flutter pub get`, then rebuild the iOS app |
+| `notRegistered` | plugin not in the native build | `flutter clean && flutter pub get`, then rebuild the native app |
 | Camera prompt never appears | usage-description key missing from the **host** app's `Info.plist` | add `NSCameraUsageDescription` and rebuild |
+| Camera denied on Android with no prompt shown | `CAMERA` not declared in the **host** app's manifest, so the runtime request is refused outright | add `<uses-permission>` and rebuild |
 | `Signed` but `signedPdfPath` is null | fetch failed, or the document is over 32 MB | expected — fetch server-side with `documentToken` |
 | Signature completes but no result arrives | the tenant's completion redirect is disabled server-side | contact Signosoft; this is a tenant configuration issue, not a client bug |
 | Second tap does nothing | concurrency guard | expected — you get `alreadyOpen` |
 
 ---
 
-## 9. Privacy and App Store submission
+## 9. Privacy and store submission
 
-The SDK ships a `PrivacyInfo.xcprivacy` in both its targets, declaring:
+The SDK ships a `PrivacyInfo.xcprivacy` in both its iOS targets, declaring:
 
 - no tracking, no tracking domains
 - no required-reason API usage
@@ -289,11 +375,19 @@ The SDK ships a `PrivacyInfo.xcprivacy` in both its targets, declaring:
 Those reflect what flows through the signing ceremony. Your own app's privacy
 manifest and App Store answers must cover whatever *you* collect in addition.
 
+Android has no privacy-manifest equivalent — Play's Data safety form is answered
+per app, not per SDK, so **you** declare the same collection there: name, email
+address and user content, collected and not shared, for app functionality. The
+SDK adds no permission to your manifest and no analytics or tracking of any kind.
+
 ---
 
 ## Known limitations
 
-Verified as working:
+**Android is far less verified than iOS.** Everything below is per platform, and
+the difference is large enough to plan around.
+
+Verified as working, **iOS only**:
 
 - `Signed` end to end, including a genuinely signed PDF (two `/ByteRange`
   entries, `ETSI.CAdES.detached`), from a clean-room app that consumed the SDK
@@ -303,14 +397,34 @@ Verified as working:
 - documents up to 50 MB across the bridge; 32 MB delivered as a local file
 - the SwiftUI `SignosoftSignerSheet` wrapper
 
-Not verified — treat as unknown, not as working:
+Verified on **Android**:
 
-- **`Rejected` end to end.** Implemented and unit-tested on all three layers, but
+- the Kotlin core and the plugin compile, and a host app builds against them
+  through the shared source directory, with the signing activity present in the
+  merged manifest
+- unit tests for bridge parsing, field coercion, the PDF store including path
+  traversal and the size ceiling, the shared error-code wire format, and the
+  method-channel payload
+
+Not verified on **Android** — treat as unknown, not as working:
+
+- **The ceremony has never been displayed.** No emulator and no device run: not
+  one outcome, not the timeout, not the close button, not the back button.
+- **The shell's Android bridge has never been exercised.** `HostBridgeService`
+  has posted through `window.SignosoftAndroid` in no session yet.
+- Camera and microphone permission handling, and the file chooser.
+- The base64 PDF crossing `@JavascriptInterface`, at any size. The 32 MB ceiling
+  is carried over from iOS unmeasured.
+- Rotation, backgrounding, and low-memory renderer kills.
+
+Not verified on either platform:
+
+- **`Rejected` end to end.** Implemented and unit-tested on all layers, but
   never exercised against a live rejection: the *Reject* control is not rendered
   for the test tenant, which is a server-side button configuration.
-- **Physical hardware.** Everything above was run on the iPad Pro 13" simulator.
+- **Physical hardware.** The iOS work was run on the iPad Pro 13" simulator.
 - **Camera-based signature methods**, and the media-permission prompt. They
-  cannot run on the Simulator at all.
+  cannot run on the iOS Simulator at all.
 - **Interruption handling** — backgrounding mid-ceremony, rotation, incoming
   calls. A WebView content-process crash is handled (`loadFailed`); the rest is
   untested.
@@ -318,10 +432,12 @@ Not verified — treat as unknown, not as working:
 
 Not supported:
 
-- **Android.** `open()` returns `unsupportedPlatform`.
-- **CocoaPods.** The podspec was removed in this release: CocoaPods discards
+- **CocoaPods.** The podspec was removed in 0.2.0-alpha: CocoaPods discards
   source files whose real path escapes the pod root, so the shared Swift core
   could never be compiled into the pod. It had never successfully built. Use
-  Flutter 3.44+ with Swift Package Manager.
+  Flutter 3.44+ with Swift Package Manager. Android has no equivalent problem —
+  Gradle compiles sources from outside the project root.
+- **A published Android artifact.** No Maven coordinates; the Kotlin core is
+  consumed as a local Gradle module (see §3).
 - **Bank iD and other external identity-provider hop-outs.**
 - **`downloadUrl`** — modelled, always null (see §6).

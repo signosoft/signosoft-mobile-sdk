@@ -12,8 +12,9 @@ document. `documentToken` is safe to share.
 
 ## The error code
 
-<!-- The `SignosoftErrorCode` from `Failed`, or the Swift `SignosoftError.code`.
-     The message is for developers and its wording changes; the code does not. -->
+<!-- The `SignosoftErrorCode` from `Failed`, the Swift `SignosoftError.code`, or
+     the Kotlin `SignosoftSignerResult.Failed.code`. The message is for
+     developers and its wording changes; the code does not. -->
 
 ## Diagnostics
 
@@ -33,6 +34,7 @@ document. `documentToken` is safe to share.
 
 - SDK version:
 - Flutter / Dart version (`flutter --version`):
-- Xcode version:
-- iOS version, and device or simulator model:
+- Platform (iOS / Android):
+- Xcode version, or Android Gradle plugin and JDK version:
+- OS version, and device / simulator / emulator model:
 - `documentToken`, if you got one:

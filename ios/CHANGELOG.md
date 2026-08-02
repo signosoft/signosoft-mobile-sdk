@@ -1,5 +1,20 @@
 # Changelog — SignosoftSigner (Swift)
 
+## 0.4.0-alpha
+
+Released with `signosoft_signer` 0.4.0-alpha. **No source change in this
+package** — the release adds an Android core beside it.
+
+### Changed
+
+- A Kotlin port of this package now lives in `android/`, and
+  `SignosoftErrorCode`'s raw values are shared with it as well as with Dart. A
+  test in the Kotlin core pins all three lists against each other; nothing but a
+  comment did before.
+- Documentation is per platform. Known limitations now separates what is
+  verified here — which is everything it listed before — from the much shorter
+  Android list.
+
 ## 0.3.0-alpha
 
 Released with `signosoft_signer` 0.3.0-alpha. **No source change in this package** —

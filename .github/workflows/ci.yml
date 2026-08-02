@@ -8,6 +8,7 @@ on:
 
 jobs:
   test:
+    name: Swift core and Dart plugin
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -39,11 +40,56 @@ jobs:
           dart format --output=none --set-exit-if-changed .
           flutter test
 
-  # The only check that exercises the plugin, the symlink and Swift Package
-  # Manager together the way a customer's build does — and the expensive one:
-  # macos runners bill private-repo minutes at 10x. Kept off plain pushes, so it
-  # runs where review happens.
+  # Linux bills at 1x, so unlike the iOS example build this runs on every push.
+  android:
+    name: Kotlin core and Android example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Flutter plugin compiles the Kotlin core out of the sibling android/
+      # directory. Nothing here fails loudly if that path moves — the plugin
+      # would just quietly compile without the core — so assert it first.
+      - name: The Kotlin core is where the plugin expects it
+        run: |
+          core=android/signosoft-signer/src/main
+          grep -q "\.\./\.\./$core" signosoft_signer/android/build.gradle.kts ||
+            { echo "::error::the plugin no longer points at $core"; exit 1; }
+          test -f "$core/AndroidManifest.xml" ||
+            { echo "::error::$core is missing"; exit 1; }
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Kotlin core tests
+        working-directory: android
+        run: ./gradlew test
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      # The only check that exercises the plugin, the shared source directory
+      # and the merged manifest together the way a customer's build does.
+      - name: Example app builds for Android
+        working-directory: examples/medicly
+        run: |
+          flutter pub get
+          flutter build apk --debug
+
+      - name: Plugin Android unit tests
+        working-directory: examples/medicly/android
+        run: ./gradlew :signosoft_signer:testDebugUnitTest
+
+  # The iOS equivalent of the Android example build above, and the expensive
+  # one: macos runners bill private-repo minutes at 10x. Kept off plain pushes,
+  # so it runs where review happens.
   example-build:
+    name: iOS example build
     if: github.event_name != 'push'
     runs-on: macos-15
     steps:

@@ -27,11 +27,12 @@ abstract final class SignosoftSigner {
     Duration loadTimeout = const Duration(seconds: 45),
     void Function(SignosoftDiagnostic diagnostic)? onDiagnostic,
   }) {
-    if (defaultTargetPlatform != TargetPlatform.iOS) {
+    if (defaultTargetPlatform != TargetPlatform.iOS &&
+        defaultTargetPlatform != TargetPlatform.android) {
       return Future.value(
         const Failed(
           SignosoftErrorCode.unsupportedPlatform,
-          'The Signosoft signer is available on iOS only in this phase.',
+          'The Signosoft signer is available on iOS and Android only.',
         ),
       );
     }
