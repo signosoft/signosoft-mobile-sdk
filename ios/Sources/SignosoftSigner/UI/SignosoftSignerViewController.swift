@@ -2,6 +2,8 @@
 import UIKit
 import WebKit
 
+//NOTE: Consider switching from UIKit to SwiftUI 
+
 /// Hosts the embedded Angular shell and translates its bridge messages into
 /// `SignosoftSignerResult`.
 ///
@@ -9,7 +11,7 @@ import WebKit
 /// what makes `SignosoftSignerSheet` usable inside `.fullScreenCover`.
 public final class SignosoftSignerViewController: UIViewController {
     /// Must match the name `HostBridgeService` posts to on iOS.
-    private static let handlerName = "signosoft"
+    private static let handlerName = "signosoft" //WARN: Load from configuration
 
     /// How long the shell may take to report itself ready.
     public static let defaultLoadTimeout: TimeInterval = 45

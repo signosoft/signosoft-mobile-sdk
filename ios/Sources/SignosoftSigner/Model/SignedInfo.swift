@@ -48,7 +48,8 @@ public struct SignedInfo: Codable, Equatable {
     }
 }
 
-extension SignedInfo {
+//TODO: Values either into exportable config or at least into const files
+extension SignedInfo { 
     /// Builds the payload from a `signed` / `rejected` bridge message.
     ///
     /// Every field is optional on the wire and defaulted here: a completed
@@ -72,6 +73,10 @@ extension SignedInfo {
             )
         )
     }
+
+
+    //WARN: Since the app cannot crash these will lose some of the information
+    // There is no way to differentiate between "The value acquired was empty" and "No value was acquired"
 
     private static func string(_ value: Any?) -> String { value as? String ?? "" }
 

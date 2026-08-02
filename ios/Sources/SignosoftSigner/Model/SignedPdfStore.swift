@@ -33,7 +33,7 @@ struct SignedPdfStore {
     func write(base64: String?, fileName: String?) -> URL? {
         guard let base64, !base64.isEmpty else { return nil }
         // Four base64 characters carry three bytes; check before allocating.
-        guard base64.count / 4 * 3 <= maximumBytes else { return nil }
+        guard base64.count / 4 * 3 <= maximumBytes else { return nil }   //WARN: Check whether operator precedence doesn't make a difference here
         guard let data = Data(base64Encoded: base64), !data.isEmpty,
               data.count <= maximumBytes
         else { return nil }
@@ -47,10 +47,11 @@ struct SignedPdfStore {
         }
     }
 
+    
     /// The shell supplies the document's own name, so it is never trusted as a
     /// path: only the last component survives, and it may not walk upwards.
     static func safeName(_ fileName: String?) -> String {
-        let fallback = "document.pdf"
+        let fallback = "document.pdf" //TODO: Sync this with some configuration list
         guard let last = fileName?.split(separator: "/").last else { return fallback }
 
         let name = String(last)
