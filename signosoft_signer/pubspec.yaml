@@ -1,0 +1,29 @@
+name: signosoft_signer
+description: "Signosoft Mobile SDK — open the Signosoft signature ceremony inside your Flutter app and get a typed result back."
+version: 0.3.0-alpha
+homepage: https://signosoft.com
+repository: https://github.com/signosoft/signosoft-mobile-sdk
+issue_tracker: https://github.com/signosoft/signosoft-mobile-sdk/issues
+publish_to: none
+
+# Verified against Flutter 3.44.8 / Dart 3.12.2 only. The floors below are what
+# the package actually needs — Dart 3 sealed classes and pattern matching, and
+# Flutter's Swift Package Manager support for iOS — not what has been tested.
+environment:
+  sdk: ">=3.12.0 <4.0.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: SignosoftSignerPlugin

@@ -1,0 +1,61 @@
+Proprietary Commercial License
+
+Copyright © 2026, Signosoft. All rights reserved.
+
+This software, including the `signosoft_signer` Flutter plugin, the
+`SignosoftSigner` Swift package, the example applications, all accompanying
+source code, type definitions, data, and documentation (collectively, the
+"Software"), is proprietary to Signosoft and is protected by copyright and
+other intellectual property laws and international treaties. It is NOT open
+source.
+
+
+1. COMMERCIAL USAGE
+
+A valid, paid, and active commercial license agreement with Signosoft is
+strictly required for the use, operation, reproduction, distribution, or
+deployment of this Software in any environment, including but not limited to
+development, testing, staging, and production.
+
+Operation of the Software additionally requires an active Signosoft service
+account. The Software opens a signature ceremony hosted by Signosoft, and every
+document-link token it accepts is issued against a licensed account; without
+one there is nothing for the Software to open. Possession of a copy of the
+Software does not, by itself, grant any right to use it.
+
+
+2. KEY TERMS
+
+Unauthorized Use. Any use of the Software without a current, fully paid license
+is expressly prohibited and constitutes a violation of Signosoft's intellectual
+property rights.
+
+Restrictions. Except to the extent expressly permitted by applicable law that
+cannot be excluded by agreement, you may NOT:
+  (a) reverse-engineer, decompile, disassemble, or otherwise attempt to derive
+      the source code, parsing constants, or internal logic of the Software;
+  (b) copy, modify, adapt, translate, or create derivative works of the
+      Software;
+  (c) sublicense, sell, rent, lease, lend, or otherwise distribute or make the
+      Software available to any third party;
+  (d) remove, alter, or obscure any proprietary notices, labels, or
+      obfuscation contained in the Software;
+  (e) circumvent, disable, or interfere with the licence verification or any
+      other security or protection mechanism of the Software.
+
+Legal Action. Signosoft reserves the right to pursue legal action to enforce its
+rights and to seek damages, injunctive relief, and any other remedy available
+for unauthorized use.
+
+No Warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. TO THE
+MAXIMUM EXTENT PERMITTED BY LAW, SIGNOSOFT SHALL NOT BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY ARISING FROM OR IN CONNECTION WITH THE SOFTWARE OR
+ITS USE.
+
+
+3. CONTACT
+
+For information on how to obtain a valid commercial license, pricing, and
+support, please contact us at esign@signosoft.com.

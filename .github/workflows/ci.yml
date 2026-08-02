@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Flutter plugin reaches the Swift core through a symlink pointing at
+      # the sibling ios/ directory. A checkout that dereferenced it would still
+      # compile here and then fail for every consumer, so assert it first.
+      - name: The Swift core is reachable through the symlink
+        run: |
+          link=signosoft_signer/ios/signosoft_signer/SignosoftSignerCore
+          test -L "$link" || { echo "::error::$link is not a symlink"; exit 1; }
+          test -f "$link/Package.swift" || { echo "::error::$link is dangling"; exit 1; }
+
+      - name: Swift core tests
+        working-directory: ios
+        run: swift test
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      - name: Plugin analyze, format and tests
+        working-directory: signosoft_signer
+        run: |
+          flutter pub get
+          flutter analyze
+          dart format --output=none --set-exit-if-changed .
+          flutter test
+
+  # The only check that exercises the plugin, the symlink and Swift Package
+  # Manager together the way a customer's build does — and the expensive one:
+  # macos runners bill private-repo minutes at 10x. Kept off plain pushes, so it
+  # runs where review happens.
+  example-build:
+    if: github.event_name != 'push'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      - name: Example app builds for the simulator
+        working-directory: examples/medicly
+        run: |
+          flutter pub get
+          flutter build ios --simulator --debug

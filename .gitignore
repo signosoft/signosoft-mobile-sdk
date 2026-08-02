@@ -1,0 +1,26 @@
+# Build products and resolver state. These pin absolute paths from whichever
+# machine produced them, so a committed copy breaks every other consumer.
+.dart_tool/
+build/
+.build/
+.swiftpm/
+Pods/
+Package.resolved
+pubspec.lock
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+.flutter-plugins-dependencies
+
+# The example apps' build trees are symlinks out to ~/.flutter-build when the
+# checkout sits under an iCloud-synced directory — codesign rejects every
+# framework built below one. `build/` above has a trailing slash and does not
+# match a symlink, so name them.
+/signosoft_signer/example/build
+/examples/medicly/build
+
+# Editor and OS noise.
+.idea/
+*.iml
+xcuserdata/
+.DS_Store
