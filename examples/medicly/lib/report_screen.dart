@@ -30,6 +30,10 @@ class _ReportScreenState extends State<ReportScreen> {
     final result = await SignosoftSigner.open(
       token: kBioId,
       baseUrl: Uri.parse(kEmbeddedBaseUrl),
+      // Every bridge event the shell sends, in the Flutter console. The only
+      // way to see why a ceremony hangs: no `ready` means the shell never
+      // established the session.
+      onDiagnostic: (d) => debugPrint('[signosoft] $d'),
     );
 
     if (!mounted) return;
@@ -262,8 +266,7 @@ class _SignButton extends StatelessWidget {
         if (!kIsConfigured) ...[
           const SizedBox(height: 12),
           Text(
-            'Run with --dart-define=BIOID=<token> '
-            '--dart-define=BASE_URL=<origin>. See README.md.',
+            'Run with --dart-define=BIOID=<token>. See README.md.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
