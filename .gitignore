@@ -24,3 +24,7 @@ pubspec.lock
 *.iml
 xcuserdata/
 .DS_Store
+
+# local dev helper secrets
+tools/.mint-bioid.env
+tools/.last-bioid
