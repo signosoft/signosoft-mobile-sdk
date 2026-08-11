@@ -25,8 +25,11 @@ class _SignPageState extends State<SignPage> {
   /// A bioid your backend obtained from `createDocLink`.
   final _token = TextEditingController();
 
-  /// Origin serving the Signosoft embedded signing shell. Ask Signosoft for it.
-  final _baseUrl = TextEditingController();
+  /// Origin serving the Signosoft embedded signing shell. Prefilled with the
+  /// hosted one; change it for a tenant-specific origin or a local build.
+  final _baseUrl = TextEditingController(
+    text: 'https://www.signosoft.com/mobilesdk/',
+  );
 
   SignosoftSignResult? _result;
   bool _busy = false;

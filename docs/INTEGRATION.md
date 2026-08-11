@@ -150,8 +150,9 @@ static Future<SignosoftSignResult> open({
 ```
 
 - **`token`** — the `bioid` your backend obtained from `createDocLink`.
-- **`baseUrl`** — origin serving the Signosoft signing shell. Required; ask
-  Signosoft for yours.
+- **`baseUrl`** — origin serving the Signosoft signing shell. Required;
+  `https://www.signosoft.com/mobilesdk/` unless Signosoft gave your tenant its
+  own origin.
 - **`loadTimeout`** — how long the shell may take to become interactive before
   the session gives up with `loadTimeout`. Without this a wrong `baseUrl` leaves
   a patient staring at a blank screen indefinitely.

@@ -10,7 +10,7 @@ New to the SDK: [`../docs/GETTING-STARTED.md`](../docs/GETTING-STARTED.md).
 ```dart
 final result = await SignosoftSigner.open(
   token: bioid,
-  baseUrl: Uri.parse('https://embed.example.com'),
+  baseUrl: Uri.parse('https://www.signosoft.com/mobilesdk/'),
 );
 
 switch (result) {

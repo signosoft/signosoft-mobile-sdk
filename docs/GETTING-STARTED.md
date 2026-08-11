@@ -32,15 +32,14 @@ Your backend ──createDocLink──► Signosoft ──bioid──► your ap
 |---|---|---|
 | Read access to `github.com/signosoft/signosoft-mobile-sdk` | the SDK installs as a `git:` dependency from a private repo | Signosoft |
 | API credentials for `createDocLink` / `downloadDoc` | your backend mints tokens and fetches signed PDFs | Signosoft |
-| The **shell URL** for `baseUrl` | the SDK loads the signing UI from it | Signosoft — see the note below |
+| The **shell URL** for `baseUrl` | the SDK loads the signing UI from it | already known: `https://www.signosoft.com/mobilesdk/` |
 | A test `bioid` or two | to run the flow before wiring your backend | Signosoft |
 | Tenant configuration | which signature methods appear, whether *Reject* is offered | Signosoft |
 
-> **`baseUrl` has no default yet.** The hosted signing shell is being stood up;
-> until Signosoft gives you a URL, `baseUrl` is a required parameter and there is
-> nothing sensible to put in it. Ask for it before you plan your integration
-> milestones. When the hosted URL lands, `baseUrl` becomes optional and the
-> parameter stays source-compatible.
+> **`baseUrl` is `https://www.signosoft.com/mobilesdk/`.** That host serves the
+> signing shell today; `<host>/?bioid=<token>` renders the ceremony. The
+> parameter is still required — pass the URL explicitly — so a tenant on its own
+> origin only changes one argument.
 
 ## Five-minute integration
 

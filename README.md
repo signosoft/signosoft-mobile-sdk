@@ -70,7 +70,7 @@ import 'package:signosoft_signer/signosoft_signer.dart';
 
 final result = await SignosoftSigner.open(
   token: bioid,                            // your backend minted this
-  baseUrl: Uri.parse('https://embed.example.com'),
+  baseUrl: Uri.parse('https://www.signosoft.com/mobilesdk/'),
 );
 
 switch (result) {
@@ -140,9 +140,8 @@ An **alpha** for a named pilot. Use requires a paid commercial agreement with
 Signosoft and an active service account; see `LICENSE`. Not licensed for
 redistribution.
 
-**`baseUrl` has no value yet.** The hosted signing shell is still being stood up,
-so there is nothing to point the SDK at until Signosoft gives you a URL. Ask for
-it before you plan integration milestones.
+**`baseUrl` is `https://www.signosoft.com/mobilesdk/`** — the hosted signing
+shell. Pass it as-is unless Signosoft has given your tenant a different origin.
 
 [Known limitations](docs/INTEGRATION.md#known-limitations) lists honestly what is
 verified and what is not.

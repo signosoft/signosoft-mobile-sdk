@@ -1,5 +1,17 @@
 # Changelog — signosoft_signer (Flutter)
 
+## Unreleased
+
+### Changed
+
+- **The signing shell is hosted.** `baseUrl` is
+  `https://www.signosoft.com/mobilesdk/`; the READMEs, both guides and the
+  examples now name it instead of telling integrators to ask for a URL. This
+  supersedes the "signing shell is not hosted" entry under 0.3.0-alpha, which was
+  true when written. The parameter stays required — no API change.
+- The Medicly example defaults `BASE_URL` to that origin, so a run needs only
+  `--dart-define=BIOID=…`. The plugin example prefills its `baseUrl` field.
+
 ## 0.3.0-alpha
 
 Distribution release. **No API change** — every 0.2 call site compiles unmodified.
