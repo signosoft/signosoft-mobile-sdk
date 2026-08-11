@@ -5,8 +5,8 @@ import 'package:signosoft_signer/signosoft_signer.dart';
 import 'config.dart';
 import 'medicly_logo.dart';
 
-const _patientName = 'Anna Nováková';
-const _patientDob = '14 Mar 1978';
+const _patientName = 'Vojta Vlachovsky';
+const _patientDob = '20 Apr 1967';
 const _patientMrn = 'MRN 884-201-7';
 
 class ReportScreen extends StatefulWidget {
@@ -137,7 +137,7 @@ class _SidePanel extends StatelessWidget {
                     radius: 30,
                     backgroundColor: mediclyTeal.withValues(alpha: 0.12),
                     child: const Text(
-                      'AN',
+                      'VV',
                       style: TextStyle(
                         color: mediclyDeep,
                         fontWeight: FontWeight.w700,
@@ -388,7 +388,7 @@ class _ClinicianChip extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
-          'Dr. Petr Havel',
+          'Dr. Petr Sevecek',
           style: TextStyle(fontSize: 14, color: mediclyDeep),
         ),
         const SizedBox(width: 14),
