@@ -42,6 +42,10 @@ class _SignPageState extends State<SignPage> {
   }
 
   Future<void> _sign() async {
+    // The result appears at the bottom of the page, which on a phone is behind
+    // the keyboard the token was just typed on.
+    FocusScope.of(context).unfocus();
+
     setState(() {
       _busy = true;
       _result = null;
@@ -69,37 +73,60 @@ class _SignPageState extends State<SignPage> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            TextField(
-              controller: _token,
-              autocorrect: false,
-              decoration: const InputDecoration(
-                labelText: 'bioid',
-                helperText: 'Your backend mints this with createDocLink.',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _baseUrl,
-              autocorrect: false,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                labelText: 'baseUrl',
-                hintText: 'https://…',
-                helperText: 'Origin serving the Signosoft signing shell.',
-                border: OutlineInputBorder(),
-              ),
+            // Rebuilds on every keystroke so the button below can follow the
+            // field: open() with an empty token only ever returns
+            // Failed(invalidToken), which reads as a broken SDK.
+            ValueListenableBuilder(
+              valueListenable: _token,
+              builder: (context, token, _) {
+                final hasToken = token.text.trim().isNotEmpty;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _token,
+                      autocorrect: false,
+                      decoration: const InputDecoration(
+                        labelText: 'bioid',
+                        helperText:
+                            'Your backend mints this with createDocLink.',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _baseUrl,
+                      autocorrect: false,
+                      keyboardType: TextInputType.url,
+                      decoration: const InputDecoration(
+                        labelText: 'baseUrl',
+                        hintText: 'https://…',
+                        helperText: 'Origin serving the Signosoft signing shell.',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: _busy || !hasToken ? null : _sign,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(_busy ? 'Signing…' : 'Sign document'),
+                      ),
+                    ),
+                    if (!hasToken) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Paste a bioid above to enable signing.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _busy ? null : _sign,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(_busy ? 'Signing…' : 'Sign document'),
-              ),
-            ),
-            const SizedBox(height: 24),
-            _Outcome(result: _result),
+            OutcomeView(result: _result),
           ],
         ),
       ),
@@ -108,15 +135,21 @@ class _SignPageState extends State<SignPage> {
 }
 
 /// Every outcome `open()` can produce, and what an integrator does with it.
-class _Outcome extends StatelessWidget {
-  const _Outcome({required this.result});
+///
+/// Public so a widget test can render each outcome without a platform channel.
+class OutcomeView extends StatelessWidget {
+  const OutcomeView({required this.result, super.key});
 
   final SignosoftSignResult? result;
 
   @override
   Widget build(BuildContext context) {
     final (title, detail, colour) = switch (result) {
-      null => ('No result yet', 'Enter a bioid and tap Sign.', Colors.grey),
+      null => (
+        'No result yet',
+        'Enter a bioid and tap Sign.',
+        Colors.grey.shade700,
+      ),
       Signed(
         :final documentToken,
         :final signaturesSigned,
@@ -130,29 +163,36 @@ class _Outcome extends StatelessWidget {
               'documentToken: $documentToken\n'
               'signatures: $signaturesSigned/$signaturesTotal\n'
               'local copy: ${signedPdfPath ?? "not delivered — fetch it server-side"}',
-          Colors.green,
+          Colors.green.shade900,
         ),
       Rejected(:final documentToken) => (
         'Rejected',
         'The signer refused. This is terminal server-side — the same bioid '
             'cannot be signed afterwards.\n\ndocumentToken: $documentToken',
-        Colors.orange,
+        Colors.deepOrange.shade900,
       ),
       Cancelled() => (
         'Cancelled',
         'The signer closed the ceremony. Nothing changed; you may open the '
             'same bioid again.',
-        Colors.blueGrey,
+        Colors.blueGrey.shade700,
       ),
       Failed(:final code, :final message) => (
         'Failed',
         'Branch on the code, not the message.\n\ncode: ${code.name}\n$message',
-        Colors.red,
+        Colors.red.shade800,
       ),
     };
 
     return Card(
-      color: colour.withValues(alpha: 0.08),
+      // An elevated Material draws through a physical-shape layer, which
+      // ignores the alpha of its colour: passing a translucent tint here paints
+      // a solid slab and leaves the title unreadable on it. Blend the tint down
+      // to an opaque colour instead of asking the compositor to.
+      color: Color.alphaBlend(
+        colour.withValues(alpha: 0.08),
+        Theme.of(context).colorScheme.surface,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
