@@ -1,8 +1,8 @@
 # Changelog — SignosoftSigner (Swift)
 
-## 0.4.0-beta
+## 0.4.1-beta
 
-Released with `signosoft_signer` 0.4.0-beta. One new public API —
+Released with `signosoft_signer` 0.4.1-beta. One new public API —
 `isUsableBaseURL(_:)` — plus a behaviour fix inside the view controller, a pass
 over how the ceremony handles data at rest and on screen, and the first tests that
 actually execute the WebView layer.

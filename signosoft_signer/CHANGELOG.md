@@ -1,6 +1,6 @@
 # Changelog — signosoft_signer (Flutter)
 
-## 0.4.0-beta
+## 0.4.1-beta
 
 First beta. **No API change** — every 0.3 call site compiles unmodified. Two
 documented behaviours that the code did not actually honour now do, the shell has
@@ -107,7 +107,7 @@ depend on, and the archive route is gone.
   signosoft_signer:
     git:
       url: git@github.com:signosoft/signosoft-mobile-sdk.git
-      ref: v0.4.0-beta
+      ref: v0.4.1-beta
       path: signosoft_signer
   ```
 

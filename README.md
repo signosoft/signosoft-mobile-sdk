@@ -46,7 +46,7 @@ dependencies:
   signosoft_signer:
     git:
       url: https://github.com/signosoft/signosoft-mobile-sdk.git
-      ref: v0.4.0-beta
+      ref: v0.4.1-beta
       path: signosoft_signer
 ```
 
@@ -58,7 +58,7 @@ The repository is public over HTTPS. `flutter pub get` needs no credentials — 
 GitHub account, no SSH key, no personal access token — on a developer machine or
 on a CI runner.
 
-**Always pin `ref` to a tag.** `v0.4.0-beta` is this release. Tracking a branch
+**Always pin `ref` to a tag.** `v0.4.1-beta` is this release. Tracking a branch
 means your build changes without you asking it to; if Signosoft's release note
 names a newer tag, pin that one instead.
 
