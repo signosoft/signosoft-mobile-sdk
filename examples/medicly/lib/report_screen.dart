@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:signosoft_signer/signosoft_signer.dart';
@@ -48,7 +49,11 @@ class _ReportScreenState extends State<ReportScreen> {
       // Every bridge event the shell sends, in the Flutter console. The only
       // way to see why a ceremony hangs: no `ready` means the shell never
       // established the session.
-      onDiagnostic: (d) => debugPrint('[signosoft] $d'),
+      //
+      // Debug builds only. `debugPrint` is not stripped from a release build,
+      // and the payload carries the documentToken and the signer's name and
+      // email straight into the device log.
+      onDiagnostic: kDebugMode ? (d) => debugPrint('[signosoft] $d') : null,
     );
 
     if (!mounted) return;

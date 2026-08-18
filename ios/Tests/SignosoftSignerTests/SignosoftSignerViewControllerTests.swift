@@ -54,7 +54,7 @@ final class SignosoftSignerViewControllerTests: XCTestCase {
             "signaturesTotal": 2,
         ], to: controller)
 
-        XCTAssertEqual(results.count, 1)
+        waitForResults(1)
         guard case .signed(let info) = try XCTUnwrap(results.first) else {
             return XCTFail("expected .signed, got \(String(describing: results.first))")
         }
@@ -112,6 +112,12 @@ final class SignosoftSignerViewControllerTests: XCTestCase {
         let controller = startController()
 
         send("signed", data: ["documentToken": "first"], to: controller)
+        // The signed outcome is built off the main thread, so it has to have
+        // landed before the events that must not replace it are sent. A shell
+        // that posts a terminal event while that build is still in flight is a
+        // real, unhandled ordering hazard — see the report accompanying this
+        // change.
+        waitForResults(1)
         send("cancelled", to: controller)
         send("error", data: ["message": "too late"], to: controller)
         send("rejected", to: controller)
@@ -140,7 +146,7 @@ final class SignosoftSignerViewControllerTests: XCTestCase {
 
         send("rejected", data: ["result": "rejected", "documentToken": "doc-token"], to: controller)
 
-        XCTAssertEqual(results.count, 1)
+        waitForResults(1)
         guard case .rejected(let info) = try XCTUnwrap(results.first) else {
             return XCTFail("expected .rejected, got \(String(describing: results.first))")
         }
@@ -261,6 +267,125 @@ final class SignosoftSignerViewControllerTests: XCTestCase {
         XCTAssertEqual(seen?["pdfBase64Length"] as? Int, 4)
     }
 
+    // MARK: - What the shell is allowed to report
+
+    /// Every other field may default — a missing middle name must never lose a
+    /// signature. `documentToken` may not: it is the host's only handle on the
+    /// document, so a blank one is a completed-looking ceremony the host cannot
+    /// do anything with.
+    func test_an_empty_documentToken_is_reported_as_a_failure_not_a_signature() throws {
+        let controller = startController()
+
+        send("signed", data: ["result": "success", "document": "12345"], to: controller)
+
+        waitForResults(1)
+        XCTAssertEqual(try errorCode(of: results.first), .sessionFailed)
+        if case .signed = results.first {
+            XCTFail("a token-less payload must not be handed to the host as a signature")
+        }
+    }
+
+    /// WebKit delivers bridge messages on the main thread, and building the
+    /// outcome decodes up to 32 MB of base64 and writes it to disk. Doing that
+    /// inline froze the UI at the moment the signer expects confirmation.
+    ///
+    /// What a host can observe: the bridge call returns before the result does.
+    func test_a_signed_result_is_delivered_without_blocking_the_main_thread() throws {
+        let controller = startController()
+        // Large enough that an inline decode and disk write would be felt.
+        let payload = Data(repeating: 0x41, count: 4 * 1024 * 1024).base64EncodedString()
+
+        send("signed", data: [
+            "documentToken": "doc-token",
+            "pdfFileName": "report.pdf",
+            "pdfBase64": payload,
+        ], to: controller)
+
+        XCTAssertTrue(results.isEmpty, "the decode and the disk write must not run inline")
+
+        waitForResults(1)
+        guard case .signed(let info) = try XCTUnwrap(results.first) else {
+            return XCTFail("expected .signed, got \(String(describing: results.first))")
+        }
+        // The work really happened off the main thread, it was not skipped.
+        let file = try XCTUnwrap(info.signedPdfFileURL)
+        XCTAssertEqual(try Data(contentsOf: file).count, 4 * 1024 * 1024)
+        try? FileManager.default.removeItem(at: file)
+    }
+
+    /// This controller never dismisses itself, so a host that reports the result
+    /// but forgets to flip its `.fullScreenCover` binding would otherwise leave
+    /// a live page — possibly holding a camera or microphone stream — running.
+    func test_the_page_is_stopped_once_a_result_has_been_reported() throws {
+        let controller = startController()
+        let webView = try webView(of: controller)
+        XCTAssertTrue(webView.isLoading, "the ceremony is still loading before it ends")
+
+        try tapClose(on: controller)
+
+        waitUntil("the shell page is torn down") {
+            webView.isLoading == false && webView.url?.host == nil
+        }
+    }
+
+    // MARK: - Which base URLs open at all
+
+    /// `URL(string: "notaurl")` succeeds — it becomes a scheme-less relative
+    /// URL — so this used to open, sit there, and report `loadFailed` seconds
+    /// later, blaming the network for a typo.
+    func test_a_baseUrl_with_no_host_is_rejected_before_the_webview_loads() throws {
+        let controller = startController(baseURL: URL(string: "notaurl")!)
+
+        XCTAssertEqual(results.count, 1, "the answer is immediate, not after a failed load")
+        XCTAssertEqual(try errorCode(of: results.first), .invalidBaseUrl)
+        XCTAssertNil(try webView(of: controller).url?.host,
+                     "nothing was requested, so the bioid never left the app")
+    }
+
+    /// The guard against over-rejecting: the ordinary case must still open. The
+    /// hanging server is `https://127.0.0.1:<port>/`, which is both.
+    func test_an_https_baseUrl_with_a_host_is_accepted() throws {
+        let controller = startController()
+
+        XCTAssertTrue(results.isEmpty, "a usable origin must not be rejected")
+        let webView = try webView(of: controller)
+        waitUntil("the shell is being loaded") { webView.url?.host == "127.0.0.1" }
+        XCTAssertEqual(webView.url?.query, "bioid=test-token")
+    }
+
+    // MARK: - What the ceremony leaves behind
+
+    /// The default store persists to disk and is shared with every other
+    /// WebView in the host app, so a finished ceremony's cookies and
+    /// localStorage outlived it and were readable by unrelated in-app code.
+    func test_a_ceremonys_cookies_and_storage_do_not_outlive_the_app_session() throws {
+        let controller = startController()
+
+        XCTAssertFalse(try webView(of: controller).configuration.websiteDataStore.isPersistent)
+    }
+
+    /// iOS writes a screenshot to disk when the app backgrounds. A medical
+    /// document and a handwritten signature should not be in it.
+    func test_the_ceremony_is_covered_while_the_app_is_not_active() throws {
+        let controller = startController()
+
+        NotificationCenter.default.post(
+            name: UIApplication.willResignActiveNotification, object: nil
+        )
+
+        let cover = try XCTUnwrap(privacyCover(of: controller), "nothing hides the ceremony")
+        XCTAssertEqual(cover, controller.view.subviews.last, "the cover must be on top")
+        XCTAssertEqual(cover.frame, controller.view.bounds)
+        XCTAssertFalse(cover.isHidden)
+        XCTAssertNotNil(cover.backgroundColor, "a transparent cover hides nothing")
+
+        NotificationCenter.default.post(
+            name: UIApplication.didBecomeActiveNotification, object: nil
+        )
+
+        XCTAssertNil(privacyCover(of: controller), "the cover goes away with the snapshot")
+    }
+
     // MARK: - Torn down without a result
 
     /// The wedge this guards against: no result means the host's completion never
@@ -284,7 +409,7 @@ final class SignosoftSignerViewControllerTests: XCTestCase {
         attach(controller)
 
         send("signed", data: ["documentToken": "doc-token"], to: controller)
-        XCTAssertEqual(results.count, 1)
+        waitForResults(1)
 
         detach(controller)
 
@@ -315,12 +440,13 @@ final class SignosoftSignerViewControllerTests: XCTestCase {
     /// watchdog cannot be raced by it.
     @discardableResult
     private func startController(
+        baseURL: URL? = nil,
         loadTimeout: TimeInterval = 0,
         onResult: ((SignosoftSignerResult) -> Void)? = nil
     ) -> SignosoftSignerViewController {
         let controller = SignosoftSignerViewController(
             token: "test-token",
-            baseURL: server.baseURL,
+            baseURL: baseURL ?? server.baseURL,
             loadTimeout: loadTimeout
         ) { [weak self] result in
             self?.results.append(result)
@@ -427,6 +553,57 @@ final class SignosoftSignerViewControllerTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(fired, 0, "the close button has no .touchUpInside action")
+    }
+
+    /// The WebView the controller is actually driving, found the way anything
+    /// outside the SDK would have to find it.
+    private func webView(
+        of controller: SignosoftSignerViewController,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> WKWebView {
+        try XCTUnwrap(
+            controller.view.subviews.compactMap { $0 as? WKWebView }.first,
+            "no WebView in the view hierarchy",
+            file: file,
+            line: line
+        )
+    }
+
+    private func privacyCover(of controller: SignosoftSignerViewController) -> UIView? {
+        controller.view.subviews.first {
+            $0.accessibilityIdentifier == SignosoftSignerViewController.privacyCoverIdentifier
+        }
+    }
+
+    /// Waits for results that no longer arrive inline: a signed or rejected
+    /// outcome is now built off the main thread and reported back on it.
+    private func waitForResults(
+        _ count: Int,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        waitUntil("\(count) result(s) reach the host", timeout: timeout, file: file, line: line) {
+            self.results.count >= count
+        }
+        XCTAssertEqual(results.count, count, "a session reports exactly once", file: file, line: line)
+    }
+
+    /// Spins the run loop until the condition holds, so main-thread work the SDK
+    /// scheduled can actually run.
+    private func waitUntil(
+        _ what: String,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: () -> Bool
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertTrue(condition(), "timed out waiting until \(what)", file: file, line: line)
     }
 
     /// Lets timers fire without blocking the thread they fire on.

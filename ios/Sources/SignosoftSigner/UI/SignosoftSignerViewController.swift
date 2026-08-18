@@ -13,6 +13,10 @@ public final class SignosoftSignerViewController: UIViewController {
     /// Must match the name `HostBridgeService` posts to on iOS.
     private static let handlerName = "signosoft" //WARN: Load from configuration
 
+    /// Names the app-switcher cover in the view hierarchy, so a test can see
+    /// the same thing the snapshot would.
+    static let privacyCoverIdentifier = "signosoft.privacyCover"
+
     /// How long the shell may take to report itself ready.
     public static let defaultLoadTimeout: TimeInterval = 45
 
@@ -30,6 +34,8 @@ public final class SignosoftSignerViewController: UIViewController {
     private let spinner = UIActivityIndicatorView(style: .large)
     private var timeoutTimer: Timer?
     private var didFinish = false
+    /// Hides the ceremony from the app switcher's snapshot. See `setUpPrivacyCover`.
+    private var privacyCover: UIView?
 
     public init(
         token: String,
@@ -51,6 +57,7 @@ public final class SignosoftSignerViewController: UIViewController {
 
     deinit {
         timeoutTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
         webView?.configuration.userContentController
             .removeScriptMessageHandler(forName: Self.handlerName)
     }
@@ -61,6 +68,7 @@ public final class SignosoftSignerViewController: UIViewController {
 
         setUpWebView()
         setUpOverlay()
+        setUpPrivacyCover()
         loadSigner()
     }
 
@@ -92,6 +100,11 @@ public final class SignosoftSignerViewController: UIViewController {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
+        // Cookies and local storage from a ceremony must not outlive it, and
+        // must not be readable by any other WebView the host app runs: the
+        // default store persists to disk and is shared across the whole app.
+        // Every ceremony gets a fresh bioid, so nothing needs to survive.
+        configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.add(
             WeakScriptMessageHandler(self),
             name: Self.handlerName
@@ -102,10 +115,16 @@ public final class SignosoftSignerViewController: UIViewController {
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = false
         webView.translatesAutoresizingMaskIntoConstraints = false
+        #if DEBUG
         if #available(iOS 16.4, *) {
-            // Lets you attach Safari's Web Inspector to the WebView.
+            // Lets you attach Safari's Web Inspector to the WebView. Debug
+            // builds only: in a release build this would hand anyone with the
+            // device and a USB Mac the bioid and the bridge — including the
+            // signer, whose identity the ceremony is asserting. The Android
+            // side gates the same capability behind FLAG_DEBUGGABLE.
             webView.isInspectable = true
         }
+        #endif
 
         view.addSubview(webView)
         NSLayoutConstraint.activate([
@@ -141,7 +160,55 @@ public final class SignosoftSignerViewController: UIViewController {
         ])
     }
 
+    /// iOS writes a screenshot of the app to disk when it goes to the
+    /// background, and that snapshot shows whatever is on screen: a medical
+    /// document and a handwritten signature. The Android side sets FLAG_SECURE
+    /// for the same reason.
+    private func setUpPrivacyCover() {
+        let centre = NotificationCenter.default
+        centre.addObserver(
+            self,
+            selector: #selector(showPrivacyCover),
+            name: UIApplication.willResignActiveNotification,
+            object: nil
+        )
+        centre.addObserver(
+            self,
+            selector: #selector(hidePrivacyCover),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+
+    @objc private func showPrivacyCover() {
+        guard privacyCover == nil, isViewLoaded else { return }
+        let cover = UIView(frame: view.bounds)
+        cover.backgroundColor = .systemBackground
+        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        cover.accessibilityIdentifier = Self.privacyCoverIdentifier
+        view.addSubview(cover)
+        privacyCover = cover
+    }
+
+    @objc private func hidePrivacyCover() {
+        privacyCover?.removeFromSuperview()
+        privacyCover = nil
+    }
+
     private func loadSigner() {
+        // Rejected here rather than after a failed network load, so a bad
+        // origin reports `invalidBaseUrl` immediately instead of a `loadFailed`
+        // that arrives seconds later and blames the network. It is also what
+        // stops a cleartext origin from ever carrying the bioid.
+        guard SignosoftSigner.isUsableBaseURL(baseURL) else {
+            finish(.error(SignosoftError(
+                code: .invalidBaseUrl,
+                message: "baseUrl must be an https:// origin with a host — got "
+                    + "\(baseURL.absoluteString). Plain http:// is accepted only "
+                    + "for localhost while developing."
+            )))
+            return
+        }
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             finish(.error(SignosoftError(
                 code: .invalidBaseUrl,
@@ -195,6 +262,13 @@ public final class SignosoftSignerViewController: UIViewController {
         didFinish = true
         timeoutTimer?.invalidate()
         timeoutTimer = nil
+        // Tear the page down rather than leave it running. It may hold a camera
+        // or a microphone stream, and this controller deliberately never
+        // dismisses itself — a host that reports the result but forgets to flip
+        // its `.fullScreenCover` binding would otherwise leave a live ceremony
+        // running unbounded.
+        webView?.stopLoading()
+        webView?.loadHTMLString("", baseURL: nil)
         onResult(result)
     }
 }
@@ -219,9 +293,9 @@ extension SignosoftSignerViewController: WKScriptMessageHandler {
             spinner.stopAnimating()
             spinner.isHidden = true
         case "signed":
-            finish(.signed(SignedInfo(bridgeData: bridgeMessage.data, pdfStore: pdfStore)))
+            deliverOutcome(bridgeMessage.data, as: SignosoftSignerResult.signed)
         case "rejected":
-            finish(.rejected(SignedInfo(bridgeData: bridgeMessage.data, pdfStore: pdfStore)))
+            deliverOutcome(bridgeMessage.data, as: SignosoftSignerResult.rejected)
         case "cancelled":
             finish(.cancelled)
         case "error":
@@ -232,6 +306,40 @@ extension SignosoftSignerViewController: WKScriptMessageHandler {
             )))
         default:
             break
+        }
+    }
+
+    /// Builds the outcome off the main thread and reports it back on it.
+    ///
+    /// Decoding up to 32 MB of base64 and writing it to disk is the most
+    /// expensive thing the SDK does, and it landed on the main thread because
+    /// that is where WebKit delivers bridge messages — freezing the UI at the
+    /// exact moment the signer is waiting for confirmation.
+    private func deliverOutcome(
+        _ data: [String: Any]?,
+        as makeResult: @escaping (SignedInfo) -> SignosoftSignerResult
+    ) {
+        guard !didFinish else { return }
+        let store = pdfStore
+        DispatchQueue.global(qos: .userInitiated).async {
+            let info = SignedInfo(bridgeData: data, pdfStore: store)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                // Every other field may safely default — losing a signer's
+                // middle name must not lose a signature. `documentToken` may
+                // not: it is the only handle the host has on the document, and
+                // a blank one turns a completed ceremony into a backend call
+                // for nothing. Better a loud failure than a hollow success.
+                guard !info.documentToken.isEmpty else {
+                    self.finish(.error(SignosoftError(
+                        code: .sessionFailed,
+                        message: "The signing shell reported an outcome with no "
+                            + "documentToken, so the document cannot be identified."
+                    )))
+                    return
+                }
+                self.finish(makeResult(info))
+            }
         }
     }
 }

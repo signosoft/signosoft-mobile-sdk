@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:signosoft_signer/signosoft_signer.dart';
 
@@ -54,8 +55,12 @@ class _SignPageState extends State<SignPage> {
     final result = await SignosoftSigner.open(
       token: _token.text.trim(),
       baseUrl: Uri.parse(_baseUrl.text.trim()),
-      // Diagnostics are for debugging an integration, never for product logic.
-      onDiagnostic: (d) => debugPrint('signosoft: ${d.event} ${d.data ?? ''}'),
+      // Diagnostics are for debugging an integration, never for product logic —
+      // and debug builds only: `debugPrint` survives into a release build, and
+      // the payload carries the documentToken and the signer's name and email.
+      onDiagnostic: kDebugMode
+          ? (d) => debugPrint('signosoft: ${d.event} ${d.data ?? ''}')
+          : null,
     );
 
     if (!mounted) return;
@@ -101,7 +106,8 @@ class _SignPageState extends State<SignPage> {
                       decoration: const InputDecoration(
                         labelText: 'baseUrl',
                         hintText: 'https://…',
-                        helperText: 'Origin serving the Signosoft signing shell.',
+                        helperText:
+                            'Origin serving the Signosoft signing shell.',
                         border: OutlineInputBorder(),
                       ),
                     ),
