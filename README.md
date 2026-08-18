@@ -3,7 +3,9 @@
 Open the Signosoft signature ceremony **inside** your app and get a typed result
 back. The patient never leaves your UI and never sees a browser.
 
-iOS and iPadOS only in this phase.
+**iOS and iPadOS only in this phase. There is no Android support** — on Android
+`open()` returns `unsupportedPlatform` and nothing is presented. See
+[Known limitations](docs/INTEGRATION.md#known-limitations).
 
 ```
 Your Flutter app
@@ -24,7 +26,7 @@ Signosoft signing shell  ──►  Signosoft REST API
 |---|---|---|
 | `signosoft_signer/` | Flutter plugin — the Dart API | Flutter apps |
 | `ios/` | Swift core — `SignosoftSigner`, a SwiftPM package | native iOS apps |
-| `examples/medicly/` | reference host app — patient view, PDF, Sign button | you, first |
+| `examples/medicly/` | reference host app — patient view, PDF, Sign button; runs on iPhone and iPad | you, first |
 | `docs/` | getting started, and the full integration guide | you, first |
 
 **Both directories must stay side by side.** The plugin reaches the Swift core
@@ -56,7 +58,8 @@ key on it. Ask Signosoft. For an HTTPS checkout instead, use
 URL with the token in it.
 
 **Always pin `ref` to a tag.** Tracking `main` means your build changes without
-you asking it to.
+you asking it to. The exact tag to pin is fixed at release — take it from the
+release note Signosoft sends with your access, not from this snippet.
 
 Your app needs an **iOS 16.0** deployment target and a few `Info.plist` keys —
 both covered in [docs/INTEGRATION.md](docs/INTEGRATION.md).
@@ -86,8 +89,12 @@ switch (result) {
 }
 ```
 
-`open()` never throws. Every failure arrives as `Failed` with a
-`SignosoftErrorCode`.
+`open()` resolves instead of throwing: every failure the SDK anticipates arrives
+as `Failed` with a `SignosoftErrorCode`. It is not an absolute guarantee — only
+`PlatformException` and `MissingPluginException` are translated, so an
+unexpected platform-channel error can still surface as a thrown exception. If a
+throw would be fatal to your flow, wrap the call. See
+[docs/INTEGRATION.md](docs/INTEGRATION.md#4-the-api).
 
 Native Swift:
 
@@ -128,8 +135,8 @@ a URL: it is an identifier, not a link.
   picking this up cold: what a `bioid` is, who mints it, what you need from
   Signosoft.
 - [docs/INTEGRATION.md](docs/INTEGRATION.md) — the full guide: install,
-  `Info.plist`, App Transport Security, every outcome, troubleshooting, known
-  limitations.
+  `Info.plist`, App Transport Security, every outcome, troubleshooting, how the
+  SDK is tested, known limitations.
 - [examples/medicly/](examples/medicly/) — the reference host app, and the
   fastest way to see the whole flow working.
 - `signosoft_signer/CHANGELOG.md`, `ios/CHANGELOG.md`.
@@ -143,8 +150,17 @@ redistribution.
 **`baseUrl` is `https://www.signosoft.com/mobilesdk/`** — the hosted signing
 shell. Pass it as-is unless Signosoft has given your tenant a different origin.
 
+Every push runs the full suite on a macOS runner: the Swift core on macOS, the
+WebView layer on an iOS Simulator destination via `xcodebuild test`, and the Dart
+plugin (`flutter analyze`, `dart format --set-exit-if-changed`, `flutter test`).
+Counts and what each one covers are in
+[docs/INTEGRATION.md](docs/INTEGRATION.md#how-this-is-tested).
+
 [Known limitations](docs/INTEGRATION.md#known-limitations) lists honestly what is
-verified and what is not.
+verified and what is not — read it before you plan around a signature method.
+One thing to know up front: the **handwritten (signature-pad) field cannot be
+completed** from the hosted shell's origin today. The typed field's *Draw* tab
+gives you a finger-drawn signature that does work.
 
 Bugs and questions: **info@signosoft.com**. Include the `SignosoftErrorCode`,
 the `documentToken` if you have one, and the diagnostic log described in the

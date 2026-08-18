@@ -8,10 +8,19 @@ Your app calls one method with a token. A full-screen signature ceremony
 appears. The patient signs. You get a typed result and a way to fetch the signed
 PDF. Everything happens inside your app.
 
+**iOS and iPadOS only.** There is no Android implementation in this release — on
+Android `open()` resolves to `Failed(unsupportedPlatform)` and nothing appears.
+Before you plan a signature method, read
+[Known limitations](INTEGRATION.md#known-limitations): handwritten
+signature-pad fields cannot be completed from the hosted shell's origin today,
+and a typed field's *Draw* tab is the way to take a finger-drawn signature.
+
 ## What a `bioid` is
 
-A `bioid` is a **single-use document link token**: a 64-character hex string that
-identifies one document, one signer, one signing session.
+A `bioid` is a **single-use document link token** identifying one document, one
+signer, one signing session. Treat it as an opaque string: the SDK only checks
+that it is non-empty, and nothing on either side validates its length or shape,
+so do not build a format check of your own.
 
 - **Your backend mints it**, by calling the Signosoft REST API `createDocLink`
   with your Signosoft credentials. The SDK cannot create one and neither can
@@ -46,7 +55,7 @@ Your backend ──createDocLink──► Signosoft ──bioid──► your ap
 1. Deployment target **iOS 16.0**; Flutter **3.44** or newer.
 2. Add the dependency (see the [README](../README.md#install)).
 3. Add the `Info.plist` keys from
-   [INTEGRATION.md](INTEGRATION.md#2-hostinfoplist).
+   [INTEGRATION.md](INTEGRATION.md#2-host-infoplist).
 4. Fetch a `bioid` from your backend.
 5. Call `SignosoftSigner.open(token: bioid, baseUrl: ...)` and switch on the
    four outcomes.
@@ -55,8 +64,9 @@ Your backend ──createDocLink──► Signosoft ──bioid──► your ap
 
 Two runnable versions ship with the SDK:
 
-- `examples/medicly/` — a realistic iPad host app: patient, report, Sign button,
-  the signed PDF rendered on return. Start here.
+- `examples/medicly/` — a realistic host app: patient, report, Sign button, the
+  signed PDF rendered on return. It adapts to the window width, so it runs on
+  iPhone as well as iPad. Start here.
 - `signosoft_signer/example/` — the bare minimum: two text fields and the four
   outcomes, with nothing else in the way.
 
