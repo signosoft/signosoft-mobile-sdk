@@ -25,12 +25,18 @@ class MediclyApp extends StatelessWidget {
           ),
         ),
       ),
-      // Demo app viewed across a room — everything runs at 2x.
-      builder: (context, child) => MediaQuery.withClampedTextScaling(
-        minScaleFactor: 2,
-        maxScaleFactor: 2,
-        child: child!,
-      ),
+      // Demo app viewed across a room — everything runs oversized. 2x is the
+      // reference on a tablet; a phone has no room for it, so the fixed scale
+      // steps down with the window's width class (see kCompactWidth /
+      // kExpandedWidth in report_screen.dart).
+      builder: (context, child) {
+        final scale = demoTextScale(MediaQuery.sizeOf(context).width);
+        return MediaQuery.withClampedTextScaling(
+          minScaleFactor: scale,
+          maxScaleFactor: scale,
+          child: child!,
+        );
+      },
       home: const ReportScreen(),
     );
   }

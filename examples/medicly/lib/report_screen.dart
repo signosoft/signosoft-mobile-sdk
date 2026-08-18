@@ -9,6 +9,21 @@ const _patientName = 'Vojta Vlachovsky';
 const _patientDob = '20 Apr 1967';
 const _patientMrn = 'MRN 884-201-7';
 
+/// Material's window width classes, which is all the responsiveness this demo
+/// needs: below [kCompactWidth] is a phone, at or above [kExpandedWidth] is a
+/// tablet in full screen, and in between is a tablet sharing the screen.
+const kCompactWidth = 600.0;
+const kExpandedWidth = 900.0;
+
+/// The demo is meant to be legible from across a room, so text scaling is
+/// pinned rather than left to the reader's setting. A phone cannot fit the
+/// tablet's 2x, so the pin steps down with the width class.
+double demoTextScale(double width) {
+  if (width >= kExpandedWidth) return 2.0;
+  if (width >= kCompactWidth) return 1.5;
+  return 1.15;
+}
+
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
 
@@ -45,16 +60,24 @@ class _ReportScreenState extends State<ReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // A phone's toolbar cannot hold the tablet's logo next to the clinician's
+    // full name, so on a compact width the logo shrinks and the chip keeps only
+    // the avatar.
+    final compact = MediaQuery.sizeOf(context).width < kCompactWidth;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
-        titleSpacing: 24,
-        toolbarHeight: 104,
-        title: const MediclyLogo(),
-        actions: const [
-          Padding(padding: EdgeInsets.only(right: 24), child: _ClinicianChip()),
+        titleSpacing: compact ? 16 : 24,
+        toolbarHeight: compact ? 72 : 104,
+        title: MediclyLogo(size: compact ? 40 : 64),
+        actions: [
+          Padding(
+            padding: EdgeInsets.only(right: compact ? 16 : 24),
+            child: _ClinicianChip(showName: !compact),
+          ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -66,8 +89,13 @@ class _ReportScreenState extends State<ReportScreen> {
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 900;
-          final viewer = _DocumentViewer(signedPdfPath: _signedPdfPath);
+          final wide = constraints.maxWidth >= kExpandedWidth;
+          final viewer = _DocumentViewer(
+            signedPdfPath: _signedPdfPath,
+            // A phone has no width to spare: fit the page instead of opening
+            // closer, or the form is cropped before it is read.
+            zoom: compact ? 1.0 : 1.3,
+          );
           final panel = _SidePanel(
             showSignButton: wide,
             result: _result,
@@ -85,9 +113,20 @@ class _ReportScreenState extends State<ReportScreen> {
             );
           }
 
+          // Stacked: the panel is content rather than a sidebar. It is a scroll
+          // view, so in a Column it would happily size itself to its full
+          // content and push the viewer and the Sign button off the bottom.
+          // Cap it instead: it shrink-wraps when it is short and scrolls inside
+          // its own box when it is not, the viewer takes whatever is left, and
+          // the Sign button stays pinned where it cannot be scrolled away.
           return Column(
             children: [
-              panel,
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: constraints.maxHeight * 0.45,
+                ),
+                child: panel,
+              ),
               Expanded(child: viewer),
               SafeArea(
                 top: false,
@@ -206,9 +245,14 @@ class _SidePanel extends StatelessWidget {
                     icon: Icons.description_outlined,
                     label: 'mock-medical-report.pdf',
                   ),
+                  // The second field is minted as `biometric`, which needs an
+                  // external signature pad the signing shell cannot reach from
+                  // this origin — so it opens and then cannot be completed.
+                  // Say so here rather than let a demo viewer discover it by
+                  // tapping. See docs/TODO.txt.
                   const _MetaRow(
                     icon: Icons.edit_outlined,
-                    label: '2 signature fields — typed + handwritten',
+                    label: '2 signature fields — typed, and one pad-only',
                   ),
                   const _MetaRow(
                     icon: Icons.verified_user_outlined,
@@ -276,10 +320,13 @@ class _SignButton extends StatelessWidget {
 }
 
 class _DocumentViewer extends StatelessWidget {
-  const _DocumentViewer({required this.signedPdfPath});
+  const _DocumentViewer({required this.signedPdfPath, this.zoom = 1.3});
 
   /// Once the ceremony returns a signed copy, show that instead of the mock.
   final String? signedPdfPath;
+
+  /// Multiple of fit-to-width the document opens at.
+  final double zoom;
 
   @override
   Widget build(BuildContext context) {
@@ -289,7 +336,7 @@ class _DocumentViewer extends StatelessWidget {
       // Default is fit-to-width; open a bit closer so the form is legible.
       onViewerReady: (_, controller) => controller.setZoom(
         Offset.zero,
-        controller.viewSize.width / controller.documentSize.width * 1.3,
+        controller.viewSize.width / controller.documentSize.width * zoom,
         duration: Duration.zero,
       ),
       loadingBannerBuilder: (_, _, _) =>
@@ -380,22 +427,33 @@ class _MetaRow extends StatelessWidget {
 }
 
 class _ClinicianChip extends StatelessWidget {
-  const _ClinicianChip();
+  const _ClinicianChip({this.showName = true});
+
+  /// Dropped on a phone, where the name and the logo cannot both fit.
+  final bool showName;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
-          'Dr. Petr Sevecek',
-          style: TextStyle(fontSize: 14, color: mediclyDeep),
-        ),
-        const SizedBox(width: 14),
+        if (showName) ...[
+          const Text(
+            'Dr. Petr Sevecek',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 14, color: mediclyDeep),
+          ),
+          const SizedBox(width: 14),
+        ],
         CircleAvatar(
-          radius: 26,
+          radius: showName ? 26 : 20,
           backgroundColor: mediclyDeep.withValues(alpha: 0.1),
-          child: const Icon(Icons.person_outline, size: 30, color: mediclyDeep),
+          child: Icon(
+            Icons.person_outline,
+            size: showName ? 30 : 24,
+            color: mediclyDeep,
+          ),
         ),
       ],
     );
