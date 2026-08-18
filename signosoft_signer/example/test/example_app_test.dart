@@ -190,7 +190,10 @@ void main() {
 
     await _pumpOutcome(tester, const Cancelled());
     expect(find.text('Cancelled'), findsOneWidget);
-    expect(find.textContaining('may open the same bioid again'), findsOneWidget);
+    expect(
+      find.textContaining('may open the same bioid again'),
+      findsOneWidget,
+    );
 
     await _pumpOutcome(
       tester,
@@ -219,10 +222,9 @@ void main() {
       final card = tester.widget<Card>(find.byType(Card));
       final background = card.color!;
       final title = tester
-          .widget<Text>(find.descendant(
-            of: find.byType(Card),
-            matching: find.byType(Text),
-          ))
+          .widget<Text>(
+            find.descendant(of: find.byType(Card), matching: find.byType(Text)),
+          )
           .style!;
 
       expect(

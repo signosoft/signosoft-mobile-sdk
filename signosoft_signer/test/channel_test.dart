@@ -138,9 +138,8 @@ void main() {
     late TestDefaultBinaryMessenger messenger;
 
     setUp(() {
-      messenger = TestDefaultBinaryMessengerBinding
-          .instance
-          .defaultBinaryMessenger;
+      messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     });
 
     tearDown(() {
@@ -162,9 +161,7 @@ void main() {
     Future<void> sendDiagnostic(Map<String, Object?> arguments) =>
         messenger.handlePlatformMessage(
           channel.name,
-          channel.codec.encodeMethodCall(
-            MethodCall('diagnostic', arguments),
-          ),
+          channel.codec.encodeMethodCall(MethodCall('diagnostic', arguments)),
           null,
         );
 
@@ -177,29 +174,46 @@ void main() {
 
       final result = await open();
 
-      expect(result, isA<Failed>(), reason: 'open() is documented never to throw');
+      expect(
+        result,
+        isA<Failed>(),
+        reason: 'open() is documented never to throw',
+      );
       expect((result as Failed).code, SignosoftErrorCode.unknown);
     });
 
-    test('a diagnostic callback that throws does not break the session', () async {
-      final seen = <String>[];
-      messenger.setMockMethodCallHandler(channel, (call) async {
-        await sendDiagnostic({'event': 'ready'});
-        await sendDiagnostic({'event': 'signed', 'data': {'documentToken': 'tok'}});
-        return {..._fullPayload, 'status': 'signed'};
-      });
+    test(
+      'a diagnostic callback that throws does not break the session',
+      () async {
+        final seen = <String>[];
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          await sendDiagnostic({'event': 'ready'});
+          await sendDiagnostic({
+            'event': 'signed',
+            'data': {'documentToken': 'tok'},
+          });
+          return {..._fullPayload, 'status': 'signed'};
+        });
 
-      final result = await open(
-        onDiagnostic: (diagnostic) {
-          seen.add(diagnostic.event);
-          throw StateError('the host callback blew up');
-        },
-      );
+        final result = await open(
+          onDiagnostic: (diagnostic) {
+            seen.add(diagnostic.event);
+            throw StateError('the host callback blew up');
+          },
+        );
 
-      expect(seen, ['ready', 'signed'], reason: 'a throw must not stop later events');
-      expect(result, isA<Signed>(), reason: 'the ceremony still reports its result');
-      expect((result as Signed).documentToken, 'doc-token');
-    });
+        expect(seen, [
+          'ready',
+          'signed',
+        ], reason: 'a throw must not stop later events');
+        expect(
+          result,
+          isA<Signed>(),
+          reason: 'the ceremony still reports its result',
+        );
+        expect((result as Signed).documentToken, 'doc-token');
+      },
+    );
   });
 
   group('parseDiagnostic', () {
