@@ -1,5 +1,32 @@
 # Changelog — SignosoftSigner (Swift)
 
+## 0.4.0-beta
+
+Released with `signosoft_signer` 0.4.0-beta. **No API change** — one behaviour fix
+inside the view controller, and the first tests that actually execute it.
+
+### Fixed
+
+- **A controller that goes away without reporting now completes with
+  `.cancelled`.** Until now a signer torn down without a terminal result left the
+  host's completion pending forever; through the Flutter plugin that also wedged
+  its "already presenting" flag, so every later `open()` answered `alreadyOpen`
+  for the rest of the app's lifetime. `viewDidDisappear` now reports, keyed on
+  `isBeingDismissed || isMovingFromParent` so an alert or permission prompt
+  presented *over* a live ceremony does not cancel it. Reporting `.cancelled`
+  there is knowingly optimistic — the source carries the comment explaining why a
+  distinct `interrupted` outcome was not added. The completion still fires exactly
+  once, and the controller still does not dismiss itself.
+
+### Added
+
+- **Tests that run on an iOS Simulator destination**, via
+  `xcodebuild test -scheme SignosoftSigner`. `swift test` runs on macOS, where
+  every `#if canImport(UIKit)` source compiles out, so the WebView, the bridge
+  dispatch, the timeout watchdog and the HTTP-error path had no coverage at all —
+  CI's only check was that they compiled. Both gates now run on every push. No
+  production code was changed to make anything testable.
+
 ## 0.3.0-alpha
 
 Released with `signosoft_signer` 0.3.0-alpha. **No source change in this package** —

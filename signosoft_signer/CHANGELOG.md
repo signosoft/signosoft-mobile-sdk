@@ -1,6 +1,30 @@
 # Changelog — signosoft_signer (Flutter)
 
-## Unreleased
+## 0.4.0-beta
+
+First beta. **No API change** — every 0.3 call site compiles unmodified. Two
+documented behaviours that the code did not actually honour now do, the shell has
+an address you can pass, and the layer that drives the WebView has tests for the
+first time.
+
+### Fixed
+
+- **`open()` really never throws.** It is documented never to throw, and it
+  could: the channel translated `PlatformException` and `MissingPluginException`
+  only, so anything else — a codec error, for instance — escaped into the
+  caller's `await`. A catch-all now returns `Failed(unknown, …)`; the specific
+  error codes are unchanged. A host `onDiagnostic` callback that throws can no
+  longer affect the session either.
+- **A signer that disappears without reporting now answers `Cancelled`.** If the
+  ceremony was torn down without a terminal result — the host popping its own
+  navigation stack, for example — the `Future` from `open()` never completed, and
+  because the plugin still believed a ceremony was on screen, *every* later
+  `open()` returned `Failed(alreadyOpen)` for the rest of the app's lifetime.
+  A ceremony interrupted this way is reported as `Cancelled`, which is
+  deliberately optimistic: it is the outcome a host can act on, and the Swift
+  side keeps a comment explaining why no separate `Interrupted` variant was
+  added. An alert or permission prompt presented *over* a live ceremony does not
+  cancel it.
 
 ### Changed
 
@@ -11,6 +35,47 @@
   true when written. The parameter stays required — no API change.
 - The Medicly example defaults `BASE_URL` to that origin, so a run needs only
   `--dart-define=BIOID=…`. The plugin example prefills its `baseUrl` field.
+- **The Medicly example is usable on a phone.** Below 900pt the header overflowed,
+  nothing scrolled and the Sign button could not be reached at all — invisible on
+  an iPad, which is why it went unnoticed. Text scaling is now pinned per Material
+  width class, so the iPad's across-the-room 2x is preserved exactly while a phone
+  gets a compact toolbar, a height-capped panel that scrolls inside its own box,
+  and a Sign button that cannot be scrolled away.
+- **The bare `example/` no longer looks like a broken SDK.** Its Sign button was
+  enabled with an empty token, so tapping it returned `Failed(invalidToken)`; it
+  is now disabled until a token is present and says why. The outcome card passed a
+  translucent tint to an elevated `Card`, which paints through a shape layer that
+  ignores alpha — it rendered as a solid slab with an unreadable title, and the
+  tint is now blended down to an opaque colour. The keyboard is dismissed before
+  signing, since on a phone the result renders behind it.
+- The client guides describe what the SDK actually does today: the handwritten
+  signature-field limitation with its cause and its remedies, the demo's width
+  classes, and the fact that no run on physical hardware has happened yet.
+
+### Added
+
+- **The iOS view-controller layer is tested.** `swift test` runs on macOS, where
+  every `#if canImport(UIKit)` source compiles out, so the WebView, the bridge
+  dispatch, the timeout watchdog and the HTTP-error path had no coverage beyond
+  "it compiles". They now run on an iOS Simulator destination in CI on every
+  push. No production code was changed to make them testable.
+- First widget tests for both examples — the Medicly layout at phone and tablet
+  widths, and the bare example's four outcomes and its guarded Sign button.
+
+### Still open
+
+- `downloadUrl` remains null; fetch the PDF server-side with `documentToken`.
+- **The handwritten (pad) signature field cannot be completed** from the hosted
+  shell. The pad's driver is gated by an origin allowlist carried in its licence,
+  and the shell's origin is not on it — so the pad reports a connection error and
+  Confirm stays disabled. Reproduced in a plain desktop browser, so it is neither
+  the SDK nor the WebView. Both remedies are server-side and need no code from
+  you; use the typed `simple` field, whose Draw tab also accepts a handwritten
+  signature. `docs/INTEGRATION.md` has the detail.
+- `Rejected` is unit-tested on all three layers but still never exercised end to
+  end.
+- Simulator only — no physical-device, camera or hardware-pad verification. It is
+  planned, not done.
 
 ## 0.3.0-alpha
 
@@ -26,7 +91,7 @@ depend on, and the archive route is gone.
   signosoft_signer:
     git:
       url: git@github.com:signosoft/signosoft-mobile-sdk.git
-      ref: v0.3.0-alpha
+      ref: v0.4.0-beta
       path: signosoft_signer
   ```
 

@@ -44,7 +44,7 @@ dependencies:
   signosoft_signer:
     git:
       url: git@github.com:signosoft/signosoft-mobile-sdk.git
-      ref: v0.3.0-alpha
+      ref: v0.4.0-beta
       path: signosoft_signer
 ```
 

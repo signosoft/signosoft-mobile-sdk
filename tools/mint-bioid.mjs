@@ -23,9 +23,16 @@ const PDF = resolve(here, '../examples/medicly/assets/mock-medical-report.pdf');
 // Field geometry is in **percentages of the page**, top-left origin, pages from
 // 1 — the same numbers the web app sends. PDF points here would land off-page,
 // and the server renders an off-page field on a page of its own.
+//
+// Exactly **one** field, and it must be `simple`. One `bioid` authorises one
+// signature, so a two-field document can never be finalised — the ceremony
+// completes the first field and the host app never receives a terminal result.
+// And `biometric` needs an external hardware signature pad that cannot be
+// reached from this origin. One typed field is the only shape that completes
+// end to end. Centred on the span the old `simple` + `biometric` pair covered
+// (51-89, midpoint 70, so an 18-wide field starts at 61).
 const FIELDS = [
-  { authmethod: 'simple', x: 51, y: 60, width: 18, height: 6 },
-  { authmethod: 'biometric', x: 71, y: 60, width: 18, height: 6 },
+  { authmethod: 'simple', x: 61, y: 60, width: 18, height: 6 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -110,7 +117,11 @@ await post(
       signatures: FIELDS.map((f, i) => ({
         sigid: i + 1,
         signame: `Signature_${i + 1}`,
-        sigauthmethods: [{ type: f.authmethod, order: i }],
+        // `order` indexes THIS signature's own auth-method list, not the field.
+        // Each field here declares exactly one method, so it is always 0.
+        // (Passing the field index instead was wrong but harmless — a document
+        // minted with order: 0 on both fields behaved identically.)
+        sigauthmethods: [{ type: f.authmethod, order: 0 }],
         sigpage: 1,
         sigx: f.x, sigy: f.y, sigwidth: f.width, sigheight: f.height,
         sigsigner: user, sigsigneremail: user,
