@@ -250,14 +250,15 @@ class _SidePanel extends StatelessWidget {
                     icon: Icons.description_outlined,
                     label: 'mock-medical-report.pdf',
                   ),
-                  // The second field is minted as `biometric`, which needs an
-                  // external signature pad the signing shell cannot reach from
-                  // this origin — so it opens and then cannot be completed.
-                  // Say so here rather than let a demo viewer discover it by
-                  // tapping. See docs/TODO.txt.
+                  // One field, and typed on purpose. One bioid authorises one
+                  // signature, so a second field could never be signed with the
+                  // same token; and a `biometric` field needs an external
+                  // signature pad the shell cannot reach from this origin. Say
+                  // what the document holds rather than let a demo viewer find
+                  // out by tapping. See docs/TODO.txt.
                   const _MetaRow(
                     icon: Icons.edit_outlined,
-                    label: '2 signature fields — typed, and one pad-only',
+                    label: '1 signature field — typed',
                   ),
                   const _MetaRow(
                     icon: Icons.verified_user_outlined,

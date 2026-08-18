@@ -19,6 +19,27 @@ These floors are what the package needs. It has been **built and exercised only
 on Flutter 3.44.8 / Dart 3.12.2 / Xcode 26.6**; lower versions inside the stated
 ranges are untested.
 
+### Setting the deployment target
+
+The floor is stated everywhere and met nowhere by default: a project created with
+`flutter create` on 3.44.8 carries `IPHONEOS_DEPLOYMENT_TARGET = 13.0` in **three**
+build configurations — Debug, Release and Profile — and all three need raising.
+
+```bash
+grep -c IPHONEOS_DEPLOYMENT_TARGET ios/Runner.xcodeproj/project.pbxproj
+# 3
+```
+
+Set it once in Xcode under **Runner → General → Minimum Deployments**, which
+rewrites all three, or edit the three lines in
+`ios/Runner.xcodeproj/project.pbxproj` directly. Leaving one behind builds until
+the linker reaches the SDK.
+
+There is **no `Podfile` to change.** With Swift Package Manager on by default from
+Flutter 3.44, `flutter create` emits none, so the `platform :ios, '16.0'` advice
+you will find by searching does not apply to this project — see
+[CocoaPods under Known limitations](#known-limitations).
+
 **Android is not supported**, and **CocoaPods is not supported.** Both are
 explained in [Known limitations](#known-limitations) — the reasons matter, so
 read them before designing around either.
@@ -36,7 +57,7 @@ WebView, or your app is terminated when the picker opens.
 | `NSCameraUsageDescription` | photo / scan signature methods, identity verification |
 | `NSMicrophoneUsageDescription` | identity verification that records video |
 | `NSPhotoLibraryUsageDescription` | choosing an existing signature image |
-| `NSLocalNetworkUsageDescription` | only when `baseUrl` is on your LAN (development) |
+| `NSLocalNetworkUsageDescription` | only for a locally served development shell (see App Transport Security below) |
 
 Write real sentences — App Review rejects placeholders.
 
@@ -54,19 +75,25 @@ standard permission alert the first time a signature method needs the camera.
 
 ### App Transport Security
 
-An `https://` `baseUrl` needs **no ATS changes** — this is the production case.
+An `https://` `baseUrl` needs **no ATS changes** — this is the production case,
+and now very nearly the only case.
 
-For local development against a plain-HTTP shell:
+`baseUrl` is validated before anything is loaded: it must be an `https://` origin
+with a host, and plain `http://` is accepted only for `localhost`, `*.localhost`,
+`127.0.0.1`, `::1` and `10.0.2.2`. The only cleartext shell the SDK will open at
+all is therefore one served on the machine running the simulator, and that is what
+this exception is for:
 
 ```xml
 <key>NSAppTransportSecurity</key>
 <dict><key>NSAllowsLocalNetworking</key><true/></dict>
 ```
 
-That covers `localhost` and private IP ranges without opening arbitrary cleartext
-loads. It does **not** cover an `http://` public hostname — ATS blocks those and
-the SDK reports `loadFailed` with WebKit's "requires the use of a secure
-connection" message.
+It no longer buys you a LAN IP. `http://192.168.x.x` is rejected up front with
+`invalidBaseUrl`, before the signer appears, rather than loading and failing later:
+a cleartext page is not a *secure context*, so WebCrypto does not exist there and
+the shell could never have completed a signature over it. To drive a
+development shell from a physical device, put it behind `https://`.
 
 ---
 
@@ -78,15 +105,19 @@ connection" message.
 dependencies:
   signosoft_signer:
     git:
-      url: git@github.com:signosoft/signosoft-mobile-sdk.git
-      ref: v0.4.0-beta        # always a tag, never `main`
+      url: https://github.com/signosoft/signosoft-mobile-sdk.git
+      ref: v0.4.0-beta        # always a tag, never a branch
       path: signosoft_signer
 ```
 
-The repository is private: you need a GitHub account with read access and an SSH
-key on it, or an HTTPS URL carrying a personal access token. Ask Signosoft for
-access. In CI, give the runner the same key — pub shells out to `git`, so
-whatever `git clone` can reach, pub can reach.
+The repository is **public over HTTPS**, so this needs no credentials: no GitHub
+account, no SSH key, no personal access token, and nothing extra on a CI runner.
+Pub shells out to `git`, so whatever `git clone` of that URL can reach, pub can
+reach.
+
+The `path:` key here belongs to the `git:` block and selects a subdirectory of the
+clone. It is not pub's local `path:` dependency — see below for why the whole
+repository has to come down.
 
 Pub clones the **whole repository** into its cache, which is what makes this work:
 the plugin's symlink to the sibling Swift core resolves inside the clone. A
@@ -130,11 +161,34 @@ Consequences for you:
   link and silently duplicate the Swift core.
 - Do not vendor `signosoft_signer/` into your repo on its own.
 
-Check the link survived:
+Check the link survived. Installed as a `git:` dependency you have no directory
+called `signosoft-mobile-sdk`: pub's clone lives in its cache under a
+SHA-suffixed name, so glob for it.
 
 ```bash
-ls -l signosoft-mobile-sdk/signosoft_signer/ios/signosoft_signer/SignosoftSignerCore
-# -> ../../../ios          (and `cat .../SignosoftSignerCore/Package.swift` works)
+ls -l ~/.pub-cache/git/signosoft-mobile-sdk-*/signosoft_signer/ios/signosoft_signer/SignosoftSignerCore
+```
+
+```
+lrwxr-xr-x@ 1 you staff 12 Aug 18 10:35 /Users/you/.pub-cache/git/signosoft-mobile-sdk-b47384fe3b9200c13efc46f57b44f3d3b4117a13/signosoft_signer/ios/signosoft_signer/SignosoftSignerCore -> ../../../ios
+```
+
+`l` in the mode column and `-> ../../../ios` are what you want. That it also
+resolves:
+
+```bash
+head -1 ~/.pub-cache/git/signosoft-mobile-sdk-*/signosoft_signer/ios/signosoft_signer/SignosoftSignerCore/Package.swift
+# // swift-tools-version: 5.9
+```
+
+(With more than one ref cached, `head` prefixes each match with its own path.)
+
+**The symlink does survive `flutter pub get`** — verified in the pub cache on
+2026-08-18, across three cache entries from three different refs — and Xcode
+resolves the Swift core through it, at the relocated path this section predicts:
+
+```
+SignosoftSigner: <your app>/ios/Flutter/ephemeral/Packages/.packages/signosoft_signer/SignosoftSignerCore @ local
 ```
 
 ---
@@ -153,7 +207,14 @@ static Future<SignosoftSignResult> open({
 - **`token`** — the `bioid` your backend obtained from `createDocLink`.
 - **`baseUrl`** — origin serving the Signosoft signing shell. Required;
   `https://www.signosoft.com/mobilesdk/` unless Signosoft gave your tenant its
-  own origin.
+  own origin. It must be an `https://` origin **with a host**. Plain `http://` is
+  accepted only for `localhost`, `*.localhost`, `127.0.0.1`, `::1` and `10.0.2.2`
+  while developing. Anything else resolves to `Failed(invalidBaseUrl)`
+  immediately, before the signer appears — a public `http://` origin is rejected
+  outright, and could not complete a signature anyway: it is not a secure
+  context, so WebCrypto does not exist there. The check runs before the token is
+  ever put on the wire. Native hosts can run it themselves with
+  `SignosoftSigner.isUsableBaseURL(_:)`, which is public for that reason.
 - **`loadTimeout`** — how long the shell may take to become interactive before
   the session gives up with `loadTimeout`. Without this a wrong `baseUrl` leaves
   a patient staring at a blank screen indefinitely.
@@ -172,6 +233,15 @@ Nothing the SDK does propagates an exception into your `await`, so a
 A callback you pass to `onDiagnostic` is also guarded: if it throws, the throw is
 swallowed and the ceremony continues. Diagnostics are a debugging aid and cannot
 affect the session.
+
+**An outcome with no `documentToken` is a failure, not a signature.** If the shell
+announces a completed ceremony but supplies no `documentToken`, `open()` resolves
+to `Failed(sessionFailed)` rather than `Signed`. Every other metadata field may
+safely default — a malformed middle name must never lose a signature — but that
+one may not: it is the only handle you have on the document, so a blank one would
+send your backend to fetch nothing and report success. This has not been seen from
+the live shell; it is a guard against a hollow success, not a described failure
+mode.
 
 ---
 
@@ -193,9 +263,31 @@ sealed class SignosoftSignResult
 | Outcome | Server state | What to do |
 |---|---|---|
 | `Signed` | signed and recorded | fetch the PDF with `documentToken`; attach to the patient record |
-| `Rejected` | rejected — **terminal** | record the refusal; the `bioid` cannot be signed afterwards |
+| `Rejected` | rejected — **terminal** | record the refusal; the `bioid` cannot be signed afterwards. Whether a *Reject* control is rendered at all is tenant configuration — see below |
 | `Cancelled` | **not necessarily unchanged** — see below | you may open the same `bioid` again, but re-read the document's state rather than assuming nothing was recorded |
 | `Failed` | usually unchanged | branch on `code` |
+
+### `Rejected` is wired through, and has never been exercised end to end
+
+Rejection is a real product feature, not a placeholder. It is in the signing
+shell's own bridge contract alongside `signed`, `cancelled` and `error`; the
+Signosoft REST API has a `reject` endpoint with its own error taxonomy; and all
+three layers of this SDK handle it — the Swift bridge maps the `rejected` event,
+the plugin marshals it, and Dart delivers a `Rejected` with the same document and
+signer metadata `Signed` carries. It is unit-tested on every layer.
+
+What has never happened is a live rejection. **Our test tenant renders no *Reject*
+control** — it reports `showPRReject: false` — so no ceremony has ever emitted the
+event against the real service. Treat the branch as implemented and unproven.
+
+Two consequences for you:
+
+- **Ask Signosoft whether Reject is enabled for your tenant.** It is a server-side
+  button configuration, not something the SDK can turn on.
+- **Handle the branch regardless.** `SignosoftSignResult` is `sealed`, so your
+  `switch` will not compile without it — which is the point. If a tenant with
+  Reject enabled sends the event and nothing handles it, the signer sits there
+  until the 45-second watchdog gives up. Handling it costs you three lines.
 
 ### `Cancelled` does not guarantee the server is untouched
 
@@ -214,6 +306,25 @@ happened"*. Where the difference matters — billing, audit, or a retry that mus
 not double-sign — ask your backend for the document's signature state after a
 `Cancelled` instead of assuming it is untouched.
 
+### An already-signed `bioid` still opens, and closing it reports `Cancelled`
+
+A token whose signature has already **completed** is not rejected. Opening it
+again renders the finished document, read-only, with its signature block on it;
+diagnostics show `ready` and no `error` event at all. Closing it delivers
+`Cancelled`.
+
+Measured 2026-08-18: a one-field document was signed to completion and `Signed`
+was delivered with a `documentToken`; the same `bioid`, unchanged, was then opened
+again, rendered the signed document, and reported `Cancelled` when closed.
+
+So a consumed token does not start failing, and `sessionFailed` is **not** what
+you get for one — see the error table below for what it does mean. Never use the
+outcome of `open()` to decide whether a token is still usable: ask your backend
+for the document's signature state.
+
+This is a different case from the one immediately below, where fields remain
+unsigned and cannot be completed. Here there is nothing left to sign.
+
 ### A partly-signed document cannot be finished from inside the ceremony
 
 There is no *Finalize* action in the ceremony. The document menu offers Rename,
@@ -221,11 +332,15 @@ Attachment, Send to email, Validate, Audit Trail, Download, Search, Thumbnails
 and Print — and nothing that completes a document whose remaining fields are
 still unsigned. The only exit is closing it, which reports `Cancelled`.
 
-This is **tenant configuration, not an SDK limitation**: the test tenant reports
-`allowPartialFinalize: false`. If your flow needs a signer to be able to submit a
-document with some fields left unsigned, ask Signosoft to enable partial
-finalisation for your tenant. Otherwise design for every required field being
-signed in one sitting.
+The test tenant reports `allowPartialFinalize: false`, and whether partial
+finalisation is enabled for your tenant is a question for Signosoft.
+
+That flag is **not** why a multi-field document stalls. The cause is that **one
+`bioid` authorises one signature**, so the remaining fields were never signable
+with that token in the first place — no *Finalize* button would have helped. Mint
+one token per signature field and this case does not arise; see
+[GETTING-STARTED.md](GETTING-STARTED.md#one-bioid-authorises-one-signature) for
+the constraint and for how well it is established.
 
 ### `SignosoftErrorCode`
 
@@ -235,10 +350,10 @@ change.
 | Code | Meaning | Typical cause |
 |---|---|---|
 | `invalidToken` | no usable `bioid` was supplied | empty string reached `open()` |
-| `invalidBaseUrl` | `baseUrl` could not be turned into a loadable URL | malformed URI |
+| `invalidBaseUrl` | `baseUrl` is not an origin the signer will load | a malformed or scheme-less URI, no host, or a plain-`http://` origin that is not loopback. Checked before anything loads |
 | `loadFailed` | the shell could not be loaded | wrong host, closed port, DNS failure, ATS block, HTTP ≥ 400 |
 | `loadTimeout` | reached but never became ready inside `loadTimeout` | host accepts connections but never responds |
-| `sessionFailed` | shell loaded, session could not be established | expired, already-used or unknown `bioid` |
+| `sessionFailed` | shell loaded, session could not be established | the `bioid` is unknown or malformed — the server reports `DOC_LINK_NOT_EXIST` — or expired. Also reported if the shell announces an outcome carrying no `documentToken`. **Not** what a token whose signature already completed gives you: that opens, and closing it reports `Cancelled` |
 | `alreadyOpen` | a ceremony is already on screen | double tap |
 | `noPresenter` | no view controller to present from | called before the UI existed |
 | `unsupportedPlatform` | not iOS | Android / web build |
@@ -307,18 +422,20 @@ cheap to log. Native hosts get the same tap via
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `flutter build ios` fails with `Exited with status code 255` and nothing else | the project sits under an iCloud-synced directory (`~/Desktop`, `~/Documents`), so build output acquires file-provider extended attributes and `codesign` refuses the Flutter framework. Re-run with `-v`: the real message is *"resource fork, Finder information, or similar detritus not allowed"*, which the plain output never shows | keep build output outside the synced tree: `rm -rf build && mkdir -p ~/.flutter-build/<app> && ln -s ~/.flutter-build/<app> build`. Or move the project to a path iCloud does not manage. Renaming the directory `.nosync` is **not** enough — that stops the upload, not the extended attributes, and `xattr -l` on such a directory still lists `com.apple.fileprovider.dir#N`. Flutter already tries `xattr -r -d` itself and still fails, because the file provider re-applies them |
 | Blank white screen, nothing happens | `baseUrl` reachable but not a signing shell, or the page never became interactive | wait for `loadTimeout` — you will get `loadTimeout`. Check `baseUrl` points at the **root** of the shell |
 | `loadFailed`, "answered HTTP 500" | `baseUrl` points at a misconfigured or wrong host | verify the URL in a browser; `<host>/?bioid=<token>` must render the ceremony |
 | `loadFailed`, "requires the use of a secure connection" | ATS blocked a cleartext load to a non-local host | use `https://`, or `NSAllowsLocalNetworking` for local development only |
-| The ceremony renders, but signing fails with `crypto.subtle is undefined` | `baseUrl` is plain HTTP to an IP or hostname, so the page is not a *secure context* and WebCrypto does not exist. The shell needs it to encrypt biometric data | serve the shell over **HTTPS**. `localhost` counts as secure (simulators), a private IP over `http://` does not — it loads but can never complete a signature |
+| `invalidBaseUrl`, before the signer ever appears | `baseUrl` is not an `https://` origin with a host: a typo, a scheme-less string, or a plain-`http://` origin that is not loopback | use `https://`. Plain `http://` is accepted only for `localhost`, `*.localhost`, `127.0.0.1`, `::1` and `10.0.2.2`. The reason it is refused rather than attempted: a cleartext page is not a *secure context*, so WebCrypto does not exist there and the shell — which needs it to encrypt biometric data — could never complete a signature. Releases before 0.4.0-beta loaded such an origin and failed later with `crypto.subtle is undefined` |
 | `loadFailed`, "Could not connect to the server" | nothing listening on that host/port | check the shell is running and reachable **from the device**, not just the Mac |
-| `sessionFailed`, "The document link is invalid" | the `bioid` is expired, already used, or unknown | mint a fresh token. Each token allows one terminal outcome |
+| `sessionFailed`, "The document link is invalid" | the `bioid` is unknown or malformed, or expired — the server reports `DOC_LINK_NOT_EXIST` | mint a fresh token. Note this is **not** the already-signed case: a token whose signature completed opens normally and reports `Cancelled` when closed |
+| `sessionFailed` / `DOC_LINK_NOT_EXIST` on a token you are sure is good, on a simulator you have run this app on before | stale WebKit storage from an earlier install made the shell resolve an empty `docLink`, and the server answers that with the same reason code it uses for a dead token — indistinguishable from the outside, which is what makes it expensive | `xcrun simctl uninstall <udid> <your bundle id>` and run again; reinstalling over the top does not clear it. Observed before 0.4.0-beta gave each ceremony its own non-persistent WebView store, which should remove the cause — that has not been re-tested, so the uninstall is still the cheap first check |
 | A **handwritten (signature-pad)** field shows **"Connection error."** and *Confirm Signature* never enables | the signature-pad driver is licensed per origin, and `https://www.signosoft.com` is not on the licence's origin allowlist, so the driver refuses to initialise. Server-side licence configuration — **not** the SDK, the WebView or the device: it reproduces in a desktop browser at the same origin, and the same document signs from an allowlisted origin | use a **typed** signature field and its *Draw* tab, which takes a finger-drawn signature and completes normally. To use pad fields, ask Signosoft to add your `baseUrl` origin to the licence allowlist, or to serve the shell from an origin already on it — `baseUrl` is an `open()` argument, so neither needs a code change on your side |
 | `notRegistered` | plugin not in the iOS build | `flutter clean && flutter pub get`, then rebuild the iOS app |
 | Camera prompt never appears | usage-description key missing from the **host** app's `Info.plist` | add `NSCameraUsageDescription` and rebuild |
 | `Signed` but `signedPdfPath` is null | fetch failed, or the document is over 32 MB | expected — fetch server-side with `documentToken` |
 | Signature completes but no result arrives | the tenant's completion redirect is disabled server-side | contact Signosoft; this is a tenant configuration issue, not a client bug |
-| Some fields are signed, the rest are not, and there is no way to finish | the ceremony has no *Finalize* action, and the tenant reports `allowPartialFinalize: false` | tenant configuration, not the SDK — ask Signosoft to enable partial finalisation. Until then the only exit is closing the ceremony, which reports `Cancelled` even though the signatures already taken are recorded |
+| Some fields are signed, the rest are not, and there is no way to finish | one `bioid` authorises one signature, so the remaining fields were never signable with that token. The ceremony also has no *Finalize* action and the test tenant reports `allowPartialFinalize: false`, but that flag is not the cause | mint **one `bioid` per signature field** and open the ceremony once per field ([why](GETTING-STARTED.md#one-bioid-authorises-one-signature)). With a single token the only exit is closing the ceremony, which reports `Cancelled` even though the signature already taken is recorded |
 | Second tap does nothing | concurrency guard | expected — you get `alreadyOpen` |
 | On a physical device: "Untrusted Developer", and the run hangs at *Installing and launching* | the signing certificate is not trusted on that device — nothing to do with the SDK | on the device: Settings → General → VPN & Device Management → *Developer App* → your `Apple Development: …` identity → **Trust**, then rerun. If that section is missing, enable Settings → Privacy & Security → **Developer Mode**, reboot, confirm |
 
@@ -346,13 +463,26 @@ not gated, because the examples are not shipped as part of the package.
 
 | Suite | Command | Tests | In CI | What it covers |
 |---|---|---|---|---|
-| Swift core, macOS | `swift test` in `ios/` | 14 | yes | bridge-message decoding, `SignedInfo` field mapping, the signed-PDF store (size ceiling, path-escape, bad input) |
-| Swift, iOS Simulator | `xcodebuild test -scheme SignosoftSigner -destination "platform=iOS Simulator,id=<udid>"` in `ios/` | 35 (the 14 above **plus 21** simulator-only) | yes | the view-controller layer: WebView setup, bridge dispatch, the load-timeout watchdog, the HTTP-error path, teardown reporting `Cancelled`, and that signed-PDF bytes never reach the diagnostic tap |
+| Swift core, macOS | `swift test` in `ios/` | 21, of which **1 skipped** | yes | bridge-message decoding, `SignedInfo` field mapping, `baseUrl` origin validation, the signed-PDF store (size ceiling, path-escape, bad input) |
+| Swift, iOS Simulator | `xcodebuild test -scheme SignosoftSigner -destination "platform=iOS Simulator,id=<udid>"` in `ios/` | 49, of which **1 skipped** (the 21 above **plus 28** simulator-only) | yes | the view-controller layer: WebView setup, bridge dispatch, the load-timeout watchdog, the HTTP-error path, `invalidBaseUrl` rejection before load, teardown reporting `Cancelled`, and that signed-PDF bytes never reach the diagnostic tap |
 | Dart plugin | `flutter analyze && flutter test` in `signosoft_signer/` | 22 | yes | the public API and the method-channel wire format: every outcome, every error code, empty token, null reply, non-iOS platform, diagnostics, and that `open()` returns rather than throws |
 | Demo host app | `flutter test` in `examples/medicly/` | 6 | no | the reference app lays out with no overflow and keeps the Sign button reachable at phone and tablet widths |
 | Bare example | `flutter test` in `signosoft_signer/example/` | 5 | no | the minimal host: all four outcomes render, and Sign stays disabled without a token |
 
-The 21 simulator tests matter for judging maturity: everything behind
+Counts measured on 2026-08-18. CI additionally runs `dart format
+--set-exit-if-changed` over the plugin.
+
+**The one skipped test is the same test in both Swift suites**, and it is skipped
+for an honest reason rather than a broken one: it asserts that the signed PDF is
+written with **complete file protection**, so it cannot be read while the device is
+locked. macOS has no such API, and the Simulator's filesystem reports no
+protection class at all, so neither destination can observe the attribute. **Only a
+run on physical hardware can prove that one** — and no device run has happened
+yet (see [Known limitations](#known-limitations)). The protection is applied in the
+write itself, not conditionally, so it is present on a device; it is the
+*assertion* that cannot execute anywhere we run today.
+
+The 28 simulator-only tests matter for judging maturity: everything behind
 `#if canImport(UIKit)` — the WKWebView, the bridge, the watchdog, the HTTP-error
 path — is compiled out on macOS, so before that suite existed CI's only check on
 the WebView layer was that it compiled. A simulator destination is the only one
@@ -373,13 +503,17 @@ been exercised against the live service is below.
 
 Verified as working:
 
-- `Signed` end to end with **typed** signature fields, including a genuinely
+- `Signed` end to end with a **typed** signature field, including a genuinely
   signed PDF (two `/ByteRange` entries, `ETSI.CAdES.detached`), from a clean-room
-  app that consumed the SDK as a dependency
+  app that consumed the SDK as a `git:` dependency. Reached with a **one-field**
+  document; a multi-field document cannot reach `Signed` on one `bioid`, which is
+  a token-minting constraint rather than an SDK defect — see below
 - `Cancelled`, `alreadyOpen`, `invalidToken`, `sessionFailed`, `loadFailed`
   (closed port, HTTP 500, ATS block), `loadTimeout`
 - documents up to 50 MB across the bridge; 32 MB delivered as a local file
 - the SwiftUI `SignosoftSignerSheet` wrapper
+- that the Swift core's symlink survives `flutter pub get` and that Xcode resolves
+  through it in a consumer's own app — checked in the pub cache, 2026-08-18
 
 Known broken, cause identified, fix is not in this repository:
 
@@ -399,11 +533,29 @@ Known broken, cause identified, fix is not in this repository:
   enables *Confirm* on an allowlisted origin, but no such ceremony has been
   confirmed through to a stamped PDF.
 
+Established, and worth planning around rather than discovering:
+
+- **One `bioid` authorises one signature.** A document with several signature
+  fields needs one token and one `open()` per field. Observed three times on
+  2026-08-18 with server state read back each time; it contradicts one internal
+  recollection and that contradiction is unresolved, so confirm with Signosoft
+  before building a flow that depends on the opposite. Detail in
+  [GETTING-STARTED.md](GETTING-STARTED.md#one-bioid-authorises-one-signature).
+- **An already-signed `bioid` still opens** and reports `Cancelled` when closed,
+  rather than `sessionFailed` (see [§5](#5-the-four-outcomes)).
+
 Not verified — treat as unknown, not as working:
 
-- **`Rejected` end to end.** Implemented and unit-tested on all three layers, but
-  never exercised against a live rejection: the *Reject* control is not rendered
-  for the test tenant, which is a server-side button configuration.
+- **`Rejected` end to end.** Rejection is a real product feature — it is in the
+  signing shell's own bridge contract next to `signed` and `cancelled`, and the
+  REST API has a `reject` endpoint with its own error taxonomy. It is implemented
+  and unit-tested on all three layers of this SDK. What has not happened is a live
+  rejection: our test tenant renders no *Reject* control (`showPRReject: false`),
+  which is server-side button configuration. **Ask Signosoft whether Reject is
+  enabled for your tenant, and handle the branch either way** — the sealed result
+  type makes that mandatory, and an unhandled `rejected` event would leave the
+  signer waiting out the 45-second watchdog. See
+  [§5](#5-the-four-outcomes).
 - **Physical hardware.** Everything in the verified list above was run on the iOS
   Simulator: the signature ceremony on the iPad Pro 13" simulator, and the demo
   host app on the iPhone 17 simulator as well. **No run on a physical iPhone or

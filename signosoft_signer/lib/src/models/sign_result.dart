@@ -59,6 +59,9 @@ sealed class SignosoftOutcome extends SignosoftSignResult {
 }
 
 /// Every signature assigned to this signer was completed.
+///
+/// One `bioid` authorises one signature, so [signaturesTotal] is the count for
+/// this token, not for the document as a whole.
 final class Signed extends SignosoftOutcome {
   const Signed({
     required super.result,
@@ -93,6 +96,13 @@ final class Signed extends SignosoftOutcome {
 
 /// The signer rejected the document. Terminal, and server-side: the link cannot
 /// be signed afterwards. Never carries a PDF.
+///
+/// Implemented and unit-tested on all three layers of the SDK, and present in
+/// the signing shell's own bridge contract — but never yet exercised against a
+/// live rejection, because the test tenant renders no *Reject* control. Ask
+/// Signosoft whether Reject is enabled for your tenant, and handle this branch
+/// either way: the sealed type makes it mandatory, and an unhandled rejection
+/// would leave the signer waiting out the load timeout.
 final class Rejected extends SignosoftOutcome {
   const Rejected({
     required super.result,
@@ -110,8 +120,17 @@ final class Rejected extends SignosoftOutcome {
   String toString() => 'Rejected($documentToken)';
 }
 
-/// The signer closed the ceremony without finishing. Nothing changed
-/// server-side and the token can be opened again.
+/// No terminal outcome was reached — read it as that, not as "nothing
+/// happened".
+///
+/// The token can be opened again. What it does *not* promise is that the server
+/// is untouched: a signer can complete one field of a multi-field document and
+/// then close the ceremony, and this is what the host receives while that
+/// signature is already recorded. Reopening a `bioid` whose signature has
+/// already completed also renders the finished document and reports this on
+/// close, rather than a [Failed] — so never use the outcome of a call to decide
+/// whether a token is still usable. Ask your backend for the document's
+/// signature state.
 final class Cancelled extends SignosoftSignResult {
   const Cancelled();
 

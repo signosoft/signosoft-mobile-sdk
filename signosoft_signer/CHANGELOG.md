@@ -28,6 +28,22 @@ first time.
 
 ### Changed
 
+- **`baseUrl` is validated before the ceremony opens.** It must be an `https://`
+  origin with a host; plain `http://` is accepted only for `localhost`,
+  `*.localhost`, `127.0.0.1`, `::1` and `10.0.2.2` while developing. Anything else
+  resolves to `Failed(invalidBaseUrl)` immediately, before the signer appears,
+  instead of loading and failing seconds later as `loadFailed` — which blamed the
+  network for what was usually a typo. A public `http://` origin is now rejected
+  outright rather than attempted: it is not a secure context, so WebCrypto does
+  not exist there and a signature could never have completed over it. This
+  supersedes the guidance that a LAN IP over plain HTTP works for development on a
+  device; serve the shell over `https://` instead.
+- **An outcome carrying an empty `documentToken` resolves to
+  `Failed(sessionFailed)`, not `Signed`.** Parsing still tolerates every other
+  missing or mistyped field on purpose — a malformed middle name must never lose a
+  completed signature — but `documentToken` is the only handle a host has on the
+  document, so a blank one turned a finished ceremony into a backend call for
+  nothing. A loud failure beats a hollow success.
 - **The signing shell is hosted.** `baseUrl` is
   `https://www.signosoft.com/mobilesdk/`; the READMEs, both guides and the
   examples now name it instead of telling integrators to ask for a URL. This

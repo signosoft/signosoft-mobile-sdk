@@ -35,15 +35,17 @@ through a relative symlink; moving or splitting them breaks the build. See
 
 ## Install
 
-Depend on the repository and point `path` at the plugin inside it. Pub clones the
-whole repository, so the Swift core next door resolves:
+Depend on the repository with a `git:` dependency, and use the `git:` block's own
+`path:` key to select the plugin subdirectory inside it — that is not pub's local
+`path:` dependency. Pub clones the whole repository, so the Swift core next door
+resolves:
 
 ```yaml
 # pubspec.yaml
 dependencies:
   signosoft_signer:
     git:
-      url: git@github.com:signosoft/signosoft-mobile-sdk.git
+      url: https://github.com/signosoft/signosoft-mobile-sdk.git
       ref: v0.4.0-beta
       path: signosoft_signer
 ```
@@ -52,17 +54,17 @@ dependencies:
 flutter pub get
 ```
 
-The repository is private — you need a GitHub account with read access and an SSH
-key on it. Ask Signosoft. For an HTTPS checkout instead, use
-`https://<token>@github.com/signosoft/signosoft-mobile-sdk.git`; never commit that
-URL with the token in it.
+The repository is public over HTTPS. `flutter pub get` needs no credentials — no
+GitHub account, no SSH key, no personal access token — on a developer machine or
+on a CI runner.
 
-**Always pin `ref` to a tag.** Tracking `main` means your build changes without
-you asking it to. The exact tag to pin is fixed at release — take it from the
-release note Signosoft sends with your access, not from this snippet.
+**Always pin `ref` to a tag.** `v0.4.0-beta` is this release. Tracking a branch
+means your build changes without you asking it to; if Signosoft's release note
+names a newer tag, pin that one instead.
 
 Your app needs an **iOS 16.0** deployment target and a few `Info.plist` keys —
-both covered in [docs/INTEGRATION.md](docs/INTEGRATION.md).
+both covered in [docs/INTEGRATION.md](docs/INTEGRATION.md), including where to
+change the deployment target in a Flutter project that has no `Podfile`.
 
 Native iOS apps add `ios/` as a local Swift package and `import SignosoftSigner`.
 
@@ -82,19 +84,22 @@ switch (result) {
     // signedPdfPath is a local convenience copy and may be null.
   case Rejected(:final documentToken):
     // The signer refused. Terminal — this bioid cannot be signed afterwards.
+    // Whether a Reject control is offered at all is tenant configuration; the
+    // branch is still mandatory, which is the point of the type being sealed.
   case Cancelled():
-    // Closed without finishing. Nothing changed; you may open it again.
+    // No terminal outcome was reached. Not a promise that nothing was recorded
+    // — re-read the document's state from your backend.
   case Failed(:final code, :final message):
     // Branch on `code`; `message` is for developers, not patients.
 }
 ```
 
-`open()` resolves instead of throwing: every failure the SDK anticipates arrives
-as `Failed` with a `SignosoftErrorCode`. It is not an absolute guarantee — only
-`PlatformException` and `MissingPluginException` are translated, so an
-unexpected platform-channel error can still surface as a thrown exception. If a
-throw would be fatal to your flow, wrap the call. See
-[docs/INTEGRATION.md](docs/INTEGRATION.md#4-the-api).
+`open()` resolves instead of throwing. Every failure the SDK anticipates arrives
+as `Failed` with a `SignosoftErrorCode`, and anything unanticipated — a
+platform-channel codec error, a reply of an unexpected shape — is caught as a
+last resort and returned as `Failed(unknown, …)`. Nothing the SDK does
+propagates an exception into your `await`, so a `try`/`catch` around the call is
+not required. See [docs/INTEGRATION.md](docs/INTEGRATION.md#4-the-api).
 
 Native Swift:
 
@@ -143,12 +148,18 @@ a URL: it is an identifier, not a link.
 
 ## Status
 
-An **alpha** for a named pilot. Use requires a paid commercial agreement with
+A **beta** for a named pilot. Use requires a paid commercial agreement with
 Signosoft and an active service account; see `LICENSE`. Not licensed for
 redistribution.
 
 **`baseUrl` is `https://www.signosoft.com/mobilesdk/`** — the hosted signing
 shell. Pass it as-is unless Signosoft has given your tenant a different origin.
+
+`baseUrl` must be an `https://` origin with a host. Plain `http://` is accepted
+only for `localhost`, `*.localhost`, `127.0.0.1`, `::1` and `10.0.2.2` while
+developing. Anything else returns `invalidBaseUrl` immediately, before the signer
+appears — a public `http://` origin is rejected outright, and could not complete a
+signature anyway: it is not a secure context, so WebCrypto does not exist there.
 
 Every push runs the full suite on a macOS runner: the Swift core on macOS, the
 WebView layer on an iOS Simulator destination via `xcodebuild test`, and the Dart
@@ -158,9 +169,12 @@ Counts and what each one covers are in
 
 [Known limitations](docs/INTEGRATION.md#known-limitations) lists honestly what is
 verified and what is not — read it before you plan around a signature method.
-One thing to know up front: the **handwritten (signature-pad) field cannot be
-completed** from the hosted shell's origin today. The typed field's *Draw* tab
-gives you a finger-drawn signature that does work.
+Two things to know up front. The **handwritten (signature-pad) field cannot be
+completed** from the hosted shell's origin today; the typed field's *Draw* tab
+gives you a finger-drawn signature that does work. And **one `bioid` authorises
+one signature**, so a document with several signature fields needs one token and
+one `open()` per field — see
+[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md#one-bioid-authorises-one-signature).
 
 Bugs and questions: **info@signosoft.com**. Include the `SignosoftErrorCode`,
 the `documentToken` if you have one, and the diagnostic log described in the

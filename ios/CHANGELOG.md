@@ -2,11 +2,33 @@
 
 ## 0.4.0-beta
 
-Released with `signosoft_signer` 0.4.0-beta. **No API change** — one behaviour fix
-inside the view controller, and the first tests that actually execute it.
+Released with `signosoft_signer` 0.4.0-beta. One new public API —
+`isUsableBaseURL(_:)` — plus a behaviour fix inside the view controller, a pass
+over how the ceremony handles data at rest and on screen, and the first tests that
+actually execute the WebView layer.
+
+### Added
+
+- **`SignosoftSigner.isUsableBaseURL(_:)`** — the same check `present` now runs
+  before loading anything, exposed so a host can reject a misconfigured origin
+  itself. A usable `baseURL` is an `https://` origin **with a host**; plain
+  `http://` is usable only for `localhost`, `*.localhost`, `127.0.0.1`, `::1` and
+  `10.0.2.2` while developing.
 
 ### Fixed
 
+- **`baseURL` is validated before the ceremony loads.** An unusable origin now
+  ends immediately in `.error(invalidBaseUrl)`, naming the URL. Previously it was
+  loaded and failed seconds later as `loadFailed`, which blamed the network for a
+  typo — `URL(string: "notaurl")` succeeds as a scheme-less relative URL, so there
+  was nothing to catch it. It also means a cleartext origin never carries the
+  token: such a page is not a secure context, so WebCrypto does not exist there
+  and the shell could not have completed a signature over it in any case.
+- **An outcome with an empty `documentToken` is a failure, not a signature.** It
+  now ends in `.error(sessionFailed)`. Every other field of `SignedInfo` may
+  safely default — losing a signer's middle name must not lose a signature — but
+  that one is the only handle the host has on the document, and a blank one turned
+  a completed ceremony into a backend call for nothing.
 - **A controller that goes away without reporting now completes with
   `.cancelled`.** Until now a signer torn down without a terminal result left the
   host's completion pending forever; through the Flutter plugin that also wedged
@@ -17,6 +39,32 @@ inside the view controller, and the first tests that actually execute it.
   there is knowingly optimistic — the source carries the comment explaining why a
   distinct `interrupted` outcome was not added. The completion still fires exactly
   once, and the controller still does not dismiss itself.
+
+### Changed
+
+- **Web Inspector is enabled in debug builds only.** The WebView was inspectable
+  in any build; in a release build that hands anyone with the device and a USB Mac
+  the token and the whole bridge — including the signer, whose identity the
+  ceremony is asserting.
+- **WebView storage is per-ceremony and no longer shared with the host app.** The
+  ceremony runs on a non-persistent website data store, so its cookies and local
+  storage neither outlive it nor are readable by any other WebView the host runs.
+  The default store persists to disk and is shared app-wide, and nothing about a
+  ceremony needs to survive it — every ceremony gets a fresh token.
+- **The signed PDF is written with complete file protection**, so a signed medical
+  document cannot be read while the device is locked. The assertion for this is
+  skipped on macOS and on the Simulator, neither of which has a data-protection
+  class to report; only a device run can observe it.
+- **The ceremony is covered in the app-switcher snapshot.** The document and any
+  signature in progress are hidden behind an opaque view when the app leaves the
+  foreground, instead of being captured into the snapshot iOS shows in the task
+  switcher and writes to disk.
+- **The page is torn down when a result is reported.** `finish` now stops loading
+  and clears the WebView's content rather than leaving the page live. This
+  controller deliberately never dismisses itself, so a host that handles the
+  result but forgets to flip its own presentation state would otherwise leave a
+  running ceremony — possibly holding a camera or microphone stream — alive
+  indefinitely.
 
 ### Added
 

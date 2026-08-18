@@ -78,7 +78,9 @@ least once.
 
 Your backend mints the `bioid` with `createDocLink` — see
 [GETTING-STARTED.md](../../docs/GETTING-STARTED.md). One token buys one terminal
-outcome: signing or rejecting consumes it, opening and cancelling does not.
+outcome: signing or rejecting consumes it, opening and cancelling does not. It
+also authorises exactly **one signature**, which is why this demo's document has a
+single field — a multi-field document needs one token per field.
 
 Signosoft developers can skip the backend entirely: `tools/mint-bioid.mjs` mints a
 document and prints its `bioid` — see [tools/README.md](../../tools/README.md).
@@ -90,7 +92,8 @@ flutter run -d <device id> --dart-define=BIOID=$(node ../../tools/mint-bioid.mjs
 ## What the host app has to provide
 
 `ios/Runner/Info.plist` carries the camera / microphone / photo / local-network usage
-strings and, for a plain-HTTP `BASE_URL`, the App Transport Security exception. **The
+strings and, for a locally served plain-HTTP `BASE_URL`, the App Transport Security
+exception. **The
 SDK cannot declare those for its host** — iOS attributes them to the app that ships.
 That is exactly the situation your app is in; see
 [INTEGRATION.md §2](../../docs/INTEGRATION.md#2-host-infoplist).
@@ -105,14 +108,23 @@ destination any iOS simulator.
 Physical device: target **Runner** → **Signing & Capabilities** → set your Team, and
 change the bundle id if `com.signosoft.mediclyDemo` collides in your account.
 
-## What the demo does not get past
+## What the demo does not show
 
-The report is minted with two signature fields: one **typed** and one
-**handwritten (signature-pad)**. The typed one signs; the pad one opens, shows
-*"Connection error."*, and its *Confirm Signature* button never enables. That is
-a server-side signature-pad licence that does not list this shell's origin — not
-the SDK, and not this demo. The panel says so in the app rather than letting a
-viewer find out by tapping. Full explanation and the two remedies:
+The report is minted with **one typed signature field**, and it signs — the demo
+reaches `Signed` and renders the signed PDF that comes back.
+
+It is deliberately one field, for two reasons.
+
+**One `bioid` authorises one signature.** A document with several fields needs one
+token and one `open()` per field; on a single token the first field signs and the
+rest are refused, so a two-field demo could never reach a terminal outcome. See
+[GETTING-STARTED.md](../../docs/GETTING-STARTED.md#one-bioid-authorises-one-signature).
+
+**The handwritten (signature-pad) field cannot be completed** from this shell's
+origin at all: it opens, the pad reports *"Connection error."*, and *Confirm
+Signature* never enables. That is a server-side signature-pad licence that does
+not list the origin — not the SDK, and not this demo. Full explanation and the two
+remedies:
 [INTEGRATION.md § Known limitations](../../docs/INTEGRATION.md#known-limitations).
 
 To take a finger-drawn signature, use the typed field's **Draw** tab.
