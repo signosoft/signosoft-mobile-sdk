@@ -144,17 +144,24 @@ run.
 WAVE 5 CANDIDATES
 --------------------------------------------------------------------------------
 
-[ ] docs/INTEGRATION.md § 4 "On throwing" is now STALE and understates the SDK.
-    It tells an integrator that open() "is not an absolute guarantee", that the
-    channel "translates PlatformException and MissingPluginException only", and
-    that an unexpected reply "can still propagate as a thrown exception" — so wrap
-    the call in try/catch. That was true when docs-truth wrote it in wave 2.
-    Wave 3's `signer-fix` then added the catch-all to
-    signosoft_signer/lib/src/channel.dart, so open() now returns
-    Failed(unknown, ...) instead. The paragraph describes code that no longer
-    exists and tells a client to write defensive code they do not need.
-    Not fixed in wave 4: `quirks-fix` owns that file for the Cancelled and
-    partial-finalize edits, and two agents must not share it.
+[x] docs/INTEGRATION.md § 4 "On throwing" was STALE. FIXED 2026-08-18 by the
+    coordinator, once `quirks-fix` had finished and released the file.
+    It told a client open() "is not an absolute guarantee", that the channel
+    "translates PlatformException and MissingPluginException only", and to wrap
+    the call in try/catch. Wave 3's signer-fix had already added the catch-all,
+    so the paragraph described code that no longer existed and asked for
+    defensive code the client does not need. Now states that open() resolves and
+    that onDiagnostic is guarded too.
+
+[x] The "How this is tested" table was wrong on three counts. FIXED 2026-08-18.
+    It claimed all four suites run in CI — CI runs neither example app's tests —
+    and carried pre-wave-3 numbers (32 simulator, 20 plugin). Now five rows with
+    an "In CI" column, and the real counts: 14 macOS, 35 simulator, 22 plugin,
+    6 medicly, 5 bare example.
+
+[ ] Consider adding the two example suites to CI. They are cheap `flutter test`
+    runs and they are the gate that would catch a demo regression like the
+    below-900pt breakage. Deliberately not done as part of a docs lane.
 
 [ ] Document the one-signature-per-bioid limit in the client-facing guides, once
     `signpad-diag` has resolved whether it is per token or per document. Held out
