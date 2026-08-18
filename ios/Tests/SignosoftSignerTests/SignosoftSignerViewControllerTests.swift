@@ -319,12 +319,26 @@ final class SignosoftSignerViewControllerTests: XCTestCase {
     func test_the_page_is_stopped_once_a_result_has_been_reported() throws {
         let controller = startController()
         let webView = try webView(of: controller)
-        XCTAssertTrue(webView.isLoading, "the ceremony is still loading before it ends")
+        XCTAssertEqual(webView.url?.host, "127.0.0.1",
+                       "the ceremony is on the shell before it ends")
 
         try tapClose(on: controller)
 
+        // Having no host is the whole invariant: the shell document is gone and
+        // cannot still be holding a camera or a microphone. `finish` stops the
+        // load and replaces the document with an empty one loaded from a nil
+        // base URL, and WebKit settles the active URL for that in the UI
+        // process, without waiting on the web content process — so this holds on
+        // the first evaluation and the wait is only a safety net.
+        //
+        // `isLoading` is deliberately NOT part of this condition. Loading the
+        // empty document starts a new load, so `isLoading` returns to true and
+        // only clears once that load finishes — which needs WebKit's networking
+        // and GPU processes, and on a cold CI runner those have taken longer to
+        // launch than this whole timeout. That wait is unbounded and it proves
+        // nothing about the invariant. Do not add it back.
         waitUntil("the shell page is torn down") {
-            webView.isLoading == false && webView.url?.host == nil
+            webView.url?.host == nil
         }
     }
 
