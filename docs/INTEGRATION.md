@@ -106,7 +106,7 @@ dependencies:
   signosoft_signer:
     git:
       url: https://github.com/signosoft/signosoft-mobile-sdk.git
-      ref: v0.4.1-beta        # always a tag, never a branch
+      ref: v0.4.2-beta        # always a tag, never a branch
       path: signosoft_signer
 ```
 
@@ -245,6 +245,29 @@ mode.
 
 ---
 
+## 4a. What the signer actually does
+
+Worth knowing before you demo it, because nothing on screen explains it and a
+signer who taps in the wrong place gets no feedback at all.
+
+1. The document opens with each signature field marked **Click to sign**.
+2. Tapping the field — and it has to be *on* the field; a tap a few points outside
+   does nothing and says nothing — opens a sheet.
+3. The sheet offers **Type**, **Draw** and **Image**. *Type* is pre-filled with the
+   signer's name. **Draw** is the one that captures a finger-drawn signature, and
+   it is what to use on a phone or tablet.
+4. **done** applies it. The field is replaced by a stamp: the Signosoft frame,
+   *Digitally signed by*, the mark, the name and the date.
+5. When the last required field is signed the ceremony finalises itself and the
+   SDK reports `Signed`. There is no separate submit button, and there is no way
+   to finalise a document that still has unsigned required fields — see below.
+
+A signature-pad field looks similar but says **Connect Signpad**, and cannot
+currently be completed from the hosted origin. See
+[Known limitations](#known-limitations).
+
+---
+
 ## 5. The four outcomes
 
 ```dart
@@ -351,7 +374,7 @@ change.
 |---|---|---|
 | `invalidToken` | no usable `bioid` was supplied | empty string reached `open()` |
 | `invalidBaseUrl` | `baseUrl` is not an origin the signer will load | a malformed or scheme-less URI, no host, or a plain-`http://` origin that is not loopback. Checked before anything loads |
-| `loadFailed` | the shell could not be loaded | wrong host, closed port, DNS failure, ATS block, HTTP ≥ 400 |
+| `loadFailed` | the shell could not be loaded | wrong host, DNS failure, ATS block, HTTP ≥ 400. A refused connection is not one of these — it ends as `loadTimeout` |
 | `loadTimeout` | reached but never became ready inside `loadTimeout` | host accepts connections but never responds |
 | `sessionFailed` | shell loaded, session could not be established | the `bioid` is unknown or malformed — the server reports `DOC_LINK_NOT_EXIST` — or expired. Also reported if the shell announces an outcome carrying no `documentToken`. **Not** what a token whose signature already completed gives you: that opens, and closing it reports `Cancelled` |
 | `alreadyOpen` | a ceremony is already on screen | double tap |
@@ -408,8 +431,8 @@ Typical output for a successful ceremony:
 
 ```
 signosoft: ready {}
-signosoft: signed {documentToken: contr-…, signaturesSigned: 2.0,
-                   signaturesTotal: 2.0, pdfBase64Length: 1739416, …}
+signosoft: signed {documentToken: contr-…, signaturesSigned: 1.0,
+                   signaturesTotal: 1.0, pdfBase64Length: 1201788, …}
 ```
 
 The signed PDF bytes are replaced by `pdfBase64Length`, so diagnostics stay
@@ -426,10 +449,10 @@ cheap to log. Native hosts get the same tap via
 | Blank white screen, nothing happens | `baseUrl` reachable but not a signing shell, or the page never became interactive | wait for `loadTimeout` — you will get `loadTimeout`. Check `baseUrl` points at the **root** of the shell |
 | `loadFailed`, "answered HTTP 500" | `baseUrl` points at a misconfigured or wrong host | verify the URL in a browser; `<host>/?bioid=<token>` must render the ceremony |
 | `loadFailed`, "requires the use of a secure connection" | ATS blocked a cleartext load to a non-local host | use `https://`, or `NSAllowsLocalNetworking` for local development only |
-| `invalidBaseUrl`, before the signer ever appears | `baseUrl` is not an `https://` origin with a host: a typo, a scheme-less string, or a plain-`http://` origin that is not loopback | use `https://`. Plain `http://` is accepted only for `localhost`, `*.localhost`, `127.0.0.1`, `::1` and `10.0.2.2`. The reason it is refused rather than attempted: a cleartext page is not a *secure context*, so WebCrypto does not exist there and the shell — which needs it to encrypt biometric data — could never complete a signature. Releases before 0.4.1-beta loaded such an origin and failed later with `crypto.subtle is undefined` |
-| `loadFailed`, "Could not connect to the server" | nothing listening on that host/port | check the shell is running and reachable **from the device**, not just the Mac |
+| `invalidBaseUrl`, before the signer ever appears | `baseUrl` is not an `https://` origin with a host: a typo, a scheme-less string, or a plain-`http://` origin that is not loopback | use `https://`. Plain `http://` is accepted only for `localhost`, `*.localhost`, `127.0.0.1`, `::1` and `10.0.2.2`. The reason it is refused rather than attempted: a cleartext page is not a *secure context*, so WebCrypto does not exist there and the shell — which needs it to encrypt biometric data — could never complete a signature. Earlier releases loaded such an origin and failed later with `crypto.subtle is undefined` |
+| `loadTimeout` after a blank screen for the whole timeout | nothing is listening on that host and port, or something accepts the connection and never serves the shell. A refused connection is **not** reported as `loadFailed` — WebKit does not hand us a failure for it, so the watchdog is what ends the wait | check the shell is running and reachable **from the device**, not just from the Mac. Measured on 2026-08-18 against a closed port on loopback: 45 s of spinner, then `loadTimeout` |
 | `sessionFailed`, "The document link is invalid" | the `bioid` is unknown or malformed, or expired — the server reports `DOC_LINK_NOT_EXIST` | mint a fresh token. Note this is **not** the already-signed case: a token whose signature completed opens normally and reports `Cancelled` when closed |
-| `sessionFailed` / `DOC_LINK_NOT_EXIST` on a token you are sure is good, on a simulator you have run this app on before | stale WebKit storage from an earlier install made the shell resolve an empty `docLink`, and the server answers that with the same reason code it uses for a dead token — indistinguishable from the outside, which is what makes it expensive | `xcrun simctl uninstall <udid> <your bundle id>` and run again; reinstalling over the top does not clear it. Observed before 0.4.1-beta gave each ceremony its own non-persistent WebView store, which should remove the cause — that has not been re-tested, so the uninstall is still the cheap first check |
+| `sessionFailed` / `DOC_LINK_NOT_EXIST` on a token you are sure is good, on a simulator you have run this app on before | stale WebKit storage from an earlier install made the shell resolve an empty `docLink`, and the server answers that with the same reason code it uses for a dead token — indistinguishable from the outside, which is what makes it expensive | `xcrun simctl uninstall <udid> <your bundle id>` and run again; reinstalling over the top does not clear it. Observed before each ceremony was given its own non-persistent WebView store, which should remove the cause — that has not been re-tested, so the uninstall is still the cheap first check |
 | A **handwritten (signature-pad)** field shows **"Connection error."** and *Confirm Signature* never enables | the signature-pad driver is licensed per origin, and `https://www.signosoft.com` is not on the licence's origin allowlist, so the driver refuses to initialise. Server-side licence configuration — **not** the SDK, the WebView or the device: it reproduces in a desktop browser at the same origin, and the same document signs from an allowlisted origin | use a **typed** signature field and its *Draw* tab, which takes a finger-drawn signature and completes normally. To use pad fields, ask Signosoft to add your `baseUrl` origin to the licence allowlist, or to serve the shell from an origin already on it — `baseUrl` is an `open()` argument, so neither needs a code change on your side |
 | `notRegistered` | plugin not in the iOS build | `flutter clean && flutter pub get`, then rebuild the iOS app |
 | Camera prompt never appears | usage-description key missing from the **host** app's `Info.plist` | add `NSCameraUsageDescription` and rebuild |
@@ -464,7 +487,7 @@ not gated, because the examples are not shipped as part of the package.
 | Suite | Command | Tests | In CI | What it covers |
 |---|---|---|---|---|
 | Swift core, macOS | `swift test` in `ios/` | 21, of which **1 skipped** | yes | bridge-message decoding, `SignedInfo` field mapping, `baseUrl` origin validation, the signed-PDF store (size ceiling, path-escape, bad input) |
-| Swift, iOS Simulator | `xcodebuild test -scheme SignosoftSigner -destination "platform=iOS Simulator,id=<udid>"` in `ios/` | 49, of which **1 skipped** (the 21 above **plus 28** simulator-only) | yes | the view-controller layer: WebView setup, bridge dispatch, the load-timeout watchdog, the HTTP-error path, `invalidBaseUrl` rejection before load, teardown reporting `Cancelled`, and that signed-PDF bytes never reach the diagnostic tap |
+| Swift, iOS Simulator | `xcodebuild test -scheme SignosoftSigner -destination "platform=iOS Simulator,id=<udid>"` in `ios/` | 51, of which **1 skipped** (the 21 above **plus 30** simulator-only) | yes | the view-controller layer: WebView setup, bridge dispatch, the load-timeout watchdog, the HTTP-error path, `invalidBaseUrl` rejection before load, teardown reporting `Cancelled`, that signed-PDF bytes never reach the diagnostic tap, and that no error message carries the `bioid` |
 | Dart plugin | `flutter analyze && flutter test` in `signosoft_signer/` | 22 | yes | the public API and the method-channel wire format: every outcome, every error code, empty token, null reply, non-iOS platform, diagnostics, and that `open()` returns rather than throws |
 | Demo host app | `flutter test` in `examples/medicly/` | 6 | no | the reference app lays out with no overflow and keeps the Sign button reachable at phone and tablet widths |
 | Bare example | `flutter test` in `signosoft_signer/example/` | 5 | no | the minimal host: all four outcomes render, and Sign stays disabled without a token |
@@ -504,12 +527,13 @@ been exercised against the live service is below.
 Verified as working:
 
 - `Signed` end to end with a **typed** signature field, including a genuinely
-  signed PDF (two `/ByteRange` entries, `ETSI.CAdES.detached`), from a clean-room
+  signed PDF (a `/ByteRange` array covering two ranges, `ETSI.CAdES.detached`), from a clean-room
   app that consumed the SDK as a `git:` dependency. Reached with a **one-field**
   document; a multi-field document cannot reach `Signed` on one `bioid`, which is
   a token-minting constraint rather than an SDK defect — see below
 - `Cancelled`, `alreadyOpen`, `invalidToken`, `sessionFailed`, `loadFailed`
-  (closed port, HTTP 500, ATS block), `loadTimeout`
+  (HTTP ≥ 400, ATS block), `loadTimeout`. A **closed port** is not in this
+  list: it produces `loadTimeout`, not `loadFailed` — see the troubleshooting table
 - documents up to 50 MB across the bridge; 32 MB delivered as a local file
 - the SwiftUI `SignosoftSignerSheet` wrapper
 - that the Swift core's symlink survives `flutter pub get` and that Xcode resolves

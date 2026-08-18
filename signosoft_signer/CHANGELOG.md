@@ -1,5 +1,24 @@
 # Changelog — signosoft_signer (Flutter)
 
+## 0.4.2-beta
+
+One security fix, and it is the reason to move off 0.4.1-beta.
+
+### Fixed
+
+- **`Failed.message` no longer contains the `bioid`.** A failure raised after the
+  shell had been reached built its message from the URL the SDK loaded — and the
+  token travels in that URL's query string. Since a `bioid` is a credential that
+  signs the document, and since this guide asks you to send us the message when
+  reporting a bug, that put a working credential into bug reports, tickets and
+  device logs. URLs in messages now carry scheme, host, port and path only, and the
+  token is stripped from every message on the way out, including messages written
+  by the signing shell rather than by the SDK. Nothing else changed: same API, same
+  outcomes, same error codes.
+
+If you pinned `0.4.1-beta`, move to this one and check anywhere you have already
+logged or forwarded a `Failed.message`.
+
 ## 0.4.1-beta
 
 First beta. **No API change** — every 0.3 call site compiles unmodified. Two
@@ -107,7 +126,7 @@ depend on, and the archive route is gone.
   signosoft_signer:
     git:
       url: git@github.com:signosoft/signosoft-mobile-sdk.git
-      ref: v0.4.1-beta
+      ref: v0.4.2-beta
       path: signosoft_signer
   ```
 

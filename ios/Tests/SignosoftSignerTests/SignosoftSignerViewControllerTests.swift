@@ -89,6 +89,36 @@ final class SignosoftSignerViewControllerTests: XCTestCase {
         XCTAssertEqual(try errorCode(of: results.first), .loadFailed)
     }
 
+    /// The `bioid` signs the document, so it is a credential — and
+    /// GETTING-STARTED.md asks integrators to send us the message when something
+    /// goes wrong. WebKit hands us the URL it actually loaded, which is the base
+    /// URL plus `?bioid=<token>`, so a message built from it put a working
+    /// credential into every bug report and device log.
+    func test_an_http_error_message_does_not_carry_the_signing_token() throws {
+        let controller = startController()
+        let loaded = server.baseURL.appendingPathComponent("/")
+            .appending(queryItems: [URLQueryItem(name: "bioid", value: "test-token")])
+
+        _ = respond(statusCode: 500, isForMainFrame: true, url: loaded, to: controller)
+
+        let message = try XCTUnwrap(signosoftError(of: results.first)).message
+        XCTAssertFalse(message.contains("test-token"), "the token is in \(message)")
+        XCTAssertFalse(message.contains("bioid"), "the query is in \(message)")
+        XCTAssertTrue(message.contains("500"), "the status a developer needs is still there")
+    }
+
+    /// The shell writes this message, not us, so no amount of care at our own
+    /// call sites covers it.
+    func test_a_shell_error_message_containing_the_token_is_redacted() throws {
+        let controller = startController()
+
+        send("error", data: ["message": "failed for ?bioid=test-token"], to: controller)
+
+        let message = try XCTUnwrap(signosoftError(of: results.first)).message
+        XCTAssertFalse(message.contains("test-token"), "the token is in \(message)")
+        XCTAssertTrue(message.contains("<redacted>"), "the reader should see something went")
+    }
+
     func test_the_watchdog_reports_loadTimeout_when_ready_never_arrives() throws {
         let arrived = expectation(description: "a result reaches the host")
         _ = startController(loadTimeout: 0.5) { _ in arrived.fulfill() }
@@ -528,10 +558,11 @@ final class SignosoftSignerViewControllerTests: XCTestCase {
     private func respond(
         statusCode: Int,
         isForMainFrame: Bool,
+        url: URL? = nil,
         to controller: SignosoftSignerViewController
     ) -> WKNavigationResponsePolicy? {
         let response = HTTPURLResponse(
-            url: server.baseURL,
+            url: url ?? server.baseURL,
             statusCode: statusCode,
             httpVersion: "HTTP/1.1",
             headerFields: nil

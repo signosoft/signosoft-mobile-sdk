@@ -255,7 +255,7 @@ class _SidePanel extends StatelessWidget {
                   // same token; and a `biometric` field needs an external
                   // signature pad the shell cannot reach from this origin. Say
                   // what the document holds rather than let a demo viewer find
-                  // out by tapping. See docs/TODO.txt.
+                  // out by tapping.
                   const _MetaRow(
                     icon: Icons.edit_outlined,
                     label: '1 signature field — typed',

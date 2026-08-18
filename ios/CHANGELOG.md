@@ -1,5 +1,16 @@
 # Changelog — SignosoftSigner (Swift)
 
+## 0.4.2-beta
+
+Released with `signosoft_signer` 0.4.2-beta. One fix, no API change.
+
+- **No error message carries the `bioid` any more.** Messages built from the URL the
+  WebView loaded exposed the token, which travels in that URL's query string. URLs
+  in messages are now reduced to scheme, host, port and path, and every failure is
+  routed through one place that strips the token from the text — including the
+  message the signing shell supplies for a `sessionFailed`, which the SDK does not
+  write and therefore cannot vouch for. Two tests cover both paths.
+
 ## 0.4.1-beta
 
 Released with `signosoft_signer` 0.4.1-beta. One new public API —

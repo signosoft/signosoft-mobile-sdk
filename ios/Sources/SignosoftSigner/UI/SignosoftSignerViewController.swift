@@ -195,25 +195,47 @@ public final class SignosoftSignerViewController: UIViewController {
         privacyCover = nil
     }
 
+    /// Never put a raw URL into a message a host will log or paste into a bug
+    /// report. The `bioid` travels in the query string, it is a credential that
+    /// signs the document, and `GETTING-STARTED.md` asks integrators to send us
+    /// the message when something goes wrong. Scheme, host, port and path are
+    /// what actually help a developer.
+    private static func withoutQuery(_ url: URL?) -> String? {
+        guard let url,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.query = nil
+        components.fragment = nil
+        return components.url?.absoluteString
+    }
+
+    /// Belt and braces behind `withoutQuery`, and the reason every failure goes
+    /// through here rather than calling `finish` directly: text we did not write
+    /// ourselves — `error.localizedDescription`, most of all — can carry the URL
+    /// we loaded. Stripping the token on the way out means a message added later
+    /// is safe by default instead of safe only if its author remembered.
+    private func fail(_ code: SignosoftErrorCode, _ message: String) {
+        let safe = token.isEmpty
+            ? message
+            : message.replacingOccurrences(of: token, with: "<redacted>")
+        finish(.error(SignosoftError(code: code, message: safe)))
+    }
+
     private func loadSigner() {
         // Rejected here rather than after a failed network load, so a bad
         // origin reports `invalidBaseUrl` immediately instead of a `loadFailed`
         // that arrives seconds later and blames the network. It is also what
         // stops a cleartext origin from ever carrying the bioid.
         guard SignosoftSigner.isUsableBaseURL(baseURL) else {
-            finish(.error(SignosoftError(
-                code: .invalidBaseUrl,
-                message: "baseUrl must be an https:// origin with a host — got "
-                    + "\(baseURL.absoluteString). Plain http:// is accepted only "
-                    + "for localhost while developing."
-            )))
+            fail(.invalidBaseUrl,
+                 "baseUrl must be an https:// origin with a host — got "
+                 + "\(Self.withoutQuery(baseURL) ?? "the value you passed"). "
+                 + "Plain http:// is accepted only for localhost while developing.")
             return
         }
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            finish(.error(SignosoftError(
-                code: .invalidBaseUrl,
-                message: "Invalid base URL: \(baseURL.absoluteString)"
-            )))
+            fail(.invalidBaseUrl,
+                 "Invalid base URL: \(Self.withoutQuery(baseURL) ?? "the value you passed")")
             return
         }
         // Angular is served from the root; an empty path would produce
@@ -224,10 +246,9 @@ public final class SignosoftSignerViewController: UIViewController {
         components.queryItems = [URLQueryItem(name: "bioid", value: token)]
 
         guard let url = components.url else {
-            finish(.error(SignosoftError(
-                code: .invalidBaseUrl,
-                message: "Could not build a signer URL from \(baseURL.absoluteString)"
-            )))
+            fail(.invalidBaseUrl,
+                 "Could not build a signer URL from "
+                 + "\(Self.withoutQuery(baseURL) ?? "the value you passed")")
             return
         }
 
@@ -244,12 +265,10 @@ public final class SignosoftSignerViewController: UIViewController {
             repeats: false
         ) { [weak self] _ in
             guard let self else { return }
-            self.finish(.error(SignosoftError(
-                code: .loadTimeout,
-                message: "The signing page did not become ready within "
-                    + "\(Int(self.loadTimeout))s. Check that baseUrl points at a "
-                    + "reachable Signosoft signing shell."
-            )))
+            self.fail(.loadTimeout,
+                      "The signing page did not become ready within "
+                      + "\(Int(self.loadTimeout))s. Check that baseUrl points at a "
+                      + "reachable Signosoft signing shell.")
         }
     }
 
@@ -299,11 +318,9 @@ extension SignosoftSignerViewController: WKScriptMessageHandler {
         case "cancelled":
             finish(.cancelled)
         case "error":
-            finish(.error(SignosoftError(
-                code: .sessionFailed,
-                message: bridgeMessage.data?["message"] as? String
-                    ?? "The signing session could not be established."
-            )))
+            fail(.sessionFailed,
+                 bridgeMessage.data?["message"] as? String
+                 ?? "The signing session could not be established.")
         default:
             break
         }
@@ -331,11 +348,9 @@ extension SignosoftSignerViewController: WKScriptMessageHandler {
                 // a blank one turns a completed ceremony into a backend call
                 // for nothing. Better a loud failure than a hollow success.
                 guard !info.documentToken.isEmpty else {
-                    self.finish(.error(SignosoftError(
-                        code: .sessionFailed,
-                        message: "The signing shell reported an outcome with no "
-                            + "documentToken, so the document cannot be identified."
-                    )))
+                    self.fail(.sessionFailed,
+                              "The signing shell reported an outcome with no "
+                              + "documentToken, so the document cannot be identified.")
                     return
                 }
                 self.finish(makeResult(info))
@@ -379,32 +394,25 @@ extension SignosoftSignerViewController: WKNavigationDelegate {
               response.statusCode >= 400
         else { return }
 
-        finish(.error(SignosoftError(
-            code: .loadFailed,
-            message: "The signing shell answered HTTP \(response.statusCode) at "
-                + "\(response.url?.absoluteString ?? baseURL.absoluteString). "
-                + "Check that baseUrl points at the root of a deployed shell."
-        )))
+        fail(.loadFailed,
+             "The signing shell answered HTTP \(response.statusCode) at "
+             + "\(Self.withoutQuery(response.url) ?? Self.withoutQuery(baseURL) ?? "the signing shell"). "
+             + "Check that baseUrl points at the root of a deployed shell.")
     }
 
     private func reportLoadFailure(_ error: Error) {
         // Superseded or user-cancelled loads are not failures worth reporting.
         if (error as NSError).code == NSURLErrorCancelled { return }
-        finish(.error(SignosoftError(
-            code: .loadFailed,
-            message: "Could not load the signing page. \(error.localizedDescription)"
-        )))
+        fail(.loadFailed, "Could not load the signing page. \(error.localizedDescription)")
     }
 
     /// The WebView's content process can be killed under memory pressure — most
     /// plausibly by a large document. The page is gone and will not come back
     /// on its own, so report rather than leave a white screen.
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        finish(.error(SignosoftError(
-            code: .loadFailed,
-            message: "The signing page stopped unexpectedly, most likely from "
-                + "memory pressure. The signature was not recorded."
-        )))
+        fail(.loadFailed,
+             "The signing page stopped unexpectedly, most likely from memory "
+             + "pressure. The signature was not recorded.")
     }
 }
 

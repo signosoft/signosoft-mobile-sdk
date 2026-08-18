@@ -124,7 +124,9 @@ Two runnable versions ship with the SDK:
 
 **info@signosoft.com**, with:
 
-- the `SignosoftErrorCode` and message, or the outcome you got and expected
+- the `SignosoftErrorCode` and message, or the outcome you got and expected. The
+  SDK redacts the `bioid` from its own messages, so a message is safe to send —
+  but check anything you have added around it
 - the `documentToken` (safe to share — unlike the `bioid`)
 - the diagnostic log: pass `onDiagnostic` to `open()` and include what it printed
 - iOS version, device or simulator model, Flutter version
