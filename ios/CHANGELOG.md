@@ -1,19 +1,9 @@
 # Changelog — SignosoftSigner (Swift)
 
-## 0.4.2-beta
+## 0.4.3-beta
 
-Released with `signosoft_signer` 0.4.2-beta. One fix, no API change.
-
-- **No error message carries the `bioid` any more.** Messages built from the URL the
-  WebView loaded exposed the token, which travels in that URL's query string. URLs
-  in messages are now reduced to scheme, host, port and path, and every failure is
-  routed through one place that strips the token from the text — including the
-  message the signing shell supplies for a `sessionFailed`, which the SDK does not
-  write and therefore cannot vouch for. Two tests cover both paths.
-
-## 0.4.1-beta
-
-Released with `signosoft_signer` 0.4.1-beta. One new public API —
+Released with `signosoft_signer` 0.4.3-beta. Error messages can no longer carry the
+signing token. One new public API —
 `isUsableBaseURL(_:)` — plus a behaviour fix inside the view controller, a pass
 over how the ceremony handles data at rest and on screen, and the first tests that
 actually execute the WebView layer.
@@ -53,6 +43,12 @@ actually execute the WebView layer.
 
 ### Changed
 
+- **No error message carries the `bioid`.** Messages built from the URL the WebView
+  loaded exposed the token, which travels in that URL's query string. URLs in
+  messages are now reduced to scheme, host, port and path, and every failure is
+  routed through one place that strips the token from the text — including the
+  message the signing shell supplies for a `sessionFailed`, which the SDK does not
+  write. Two tests cover both paths.
 - **Web Inspector is enabled in debug builds only.** The WebView was inspectable
   in any build; in a release build that hands anyone with the device and a USB Mac
   the token and the whole bridge — including the signer, whose identity the

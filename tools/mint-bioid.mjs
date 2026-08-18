@@ -24,8 +24,8 @@ const PDF = resolve(here, '../examples/medicly/assets/mock-medical-report.pdf');
 // 1 — the same numbers the web app sends. PDF points here would land off-page,
 // and the server renders an off-page field on a page of its own.
 //
-// Exactly **one** field, and it must be `simple`. One `bioid` authorises one
-// signature, so a two-field document can never be finalised — the ceremony
+// Exactly **one** field, and it must be `simple`. One field per document is the
+// shape the SDK is built around, and `simple` is the method that completes — the ceremony
 // completes the first field and the host app never receives a terminal result.
 // And `biometric` needs an external hardware signature pad that cannot be
 // reached from this origin. One typed field is the only shape that completes

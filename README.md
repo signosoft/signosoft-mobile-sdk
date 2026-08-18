@@ -46,7 +46,7 @@ dependencies:
   signosoft_signer:
     git:
       url: https://github.com/signosoft/signosoft-mobile-sdk.git
-      ref: v0.4.2-beta
+      ref: v0.4.3-beta
       path: signosoft_signer
 ```
 
@@ -58,7 +58,7 @@ The repository is public over HTTPS. `flutter pub get` needs no credentials — 
 GitHub account, no SSH key, no personal access token — on a developer machine or
 on a CI runner.
 
-**Always pin `ref` to a tag.** `v0.4.2-beta` is this release. Tracking a branch
+**Always pin `ref` to a tag.** `v0.4.3-beta` is this release. Tracking a branch
 means your build changes without you asking it to; if Signosoft's release note
 names a newer tag, pin that one instead.
 
@@ -172,9 +172,9 @@ verified and what is not — read it before you plan around a signature method.
 Two things to know up front. The **handwritten (signature-pad) field cannot be
 completed** from the hosted shell's origin today; the typed field's *Draw* tab
 gives you a finger-drawn signature that does work. And **one `bioid` authorises
-one signature**, so a document with several signature fields needs one token and
-one `open()` per field — see
-[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md#one-bioid-authorises-one-signature).
+one document**, and a terminal outcome uses it up. Give each document a single
+signature field — the shape this release is built around; see
+[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md#one-bioid-per-document).
 
 Bugs and questions: **info@signosoft.com**. Include the `SignosoftErrorCode`,
 the `documentToken` if you have one, and the diagnostic log described in the

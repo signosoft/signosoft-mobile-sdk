@@ -31,7 +31,7 @@ signature:
 | Call | Result |
 |---|---|
 | `REST/uploadDocument` | uploads `examples/medicly/assets/mock-medical-report.pdf`; returns `docid` + `doctoken` |
-| `REST/saveSignatures` | places one `simple` (typed) field, centred on the page. One `bioid` authorises one signature, so a two-field document could never be finalised; the typed field’s *Draw* tab is what captures a handwritten signature |
+| `REST/saveSignatures` | places one `simple` (typed) field, centred on the page. One field per document is the shape the SDK is built around; the typed field’s *Draw* tab is what captures a handwritten signature |
 | `REST/createSignRequest` | moves the document to *ready to sign* |
 | `REST/createDocLink` | **the `bioid`** |
 

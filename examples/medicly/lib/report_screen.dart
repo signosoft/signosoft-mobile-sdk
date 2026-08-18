@@ -250,7 +250,7 @@ class _SidePanel extends StatelessWidget {
                     icon: Icons.description_outlined,
                     label: 'mock-medical-report.pdf',
                   ),
-                  // One field, and typed on purpose. One bioid authorises one
+                  // One field, and typed on purpose. One field per document is the
                   // signature, so a second field could never be signed with the
                   // same token; and a `biometric` field needs an external
                   // signature pad the shell cannot reach from this origin. Say

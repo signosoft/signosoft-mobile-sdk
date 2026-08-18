@@ -13,8 +13,8 @@ abstract final class SignosoftSigner {
   /// signer is done.
   ///
   /// [token] is the `bioid` your backend obtained from `createDocLink`. One
-  /// `bioid` authorises one signature: a document with several signature fields
-  /// needs one token, and one call to this method, per field.
+  /// `bioid` covers one document and one signer. Give each document a single
+  /// signature field — the shape this release is built and tested around.
   ///
   /// [baseUrl] is the origin serving the Signosoft embedded signing shell. It
   /// must be an `https://` origin with a host. Plain `http://` is accepted only

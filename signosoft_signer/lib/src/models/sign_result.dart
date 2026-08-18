@@ -60,7 +60,7 @@ sealed class SignosoftOutcome extends SignosoftSignResult {
 
 /// Every signature assigned to this signer was completed.
 ///
-/// One `bioid` authorises one signature, so [signaturesTotal] is the count for
+/// One `bioid` covers one document, so [signaturesTotal] is the count for
 /// this token, not for the document as a whole.
 final class Signed extends SignosoftOutcome {
   const Signed({

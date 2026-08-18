@@ -79,8 +79,8 @@ least once.
 Your backend mints the `bioid` with `createDocLink` — see
 [GETTING-STARTED.md](../../docs/GETTING-STARTED.md). One token buys one terminal
 outcome: signing or rejecting consumes it, opening and cancelling does not. It
-also authorises exactly **one signature**, which is why this demo's document has a
-single field — a multi-field document needs one token per field.
+covers **one document**, and this demo's document has a single signature field,
+which is the shape the SDK is built around.
 
 Signosoft developers can skip the backend entirely: `tools/mint-bioid.mjs` mints a
 document and prints its `bioid` — see [tools/README.md](../../tools/README.md).
@@ -115,10 +115,9 @@ reaches `Signed` and renders the signed PDF that comes back.
 
 It is deliberately one field, for two reasons.
 
-**One `bioid` authorises one signature.** A document with several fields needs one
-token and one `open()` per field; on a single token the first field signs and the
-rest are refused, so a two-field demo could never reach a terminal outcome. See
-[GETTING-STARTED.md](../../docs/GETTING-STARTED.md#one-bioid-authorises-one-signature).
+**One signature field per document** is the shape this release is built and tested
+around, so that is what the demo mints. See
+[GETTING-STARTED.md](../../docs/GETTING-STARTED.md#one-bioid-per-document).
 
 **The handwritten (signature-pad) field cannot be completed** from this shell's
 origin at all: it opens, the pad reports *"Connection error."*, and *Confirm

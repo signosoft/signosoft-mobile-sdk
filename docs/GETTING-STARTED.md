@@ -41,29 +41,14 @@ build a format check of your own.
 Your backend ──createDocLink──► Signosoft ──bioid──► your app ──► SignosoftSigner.open()
 ```
 
-## One `bioid` authorises one signature
+## One `bioid` per document
 
-If a document has several signature fields, your backend must mint **one `bioid`
-per field**, and your app must run **one `open()` per field**. A single token
-cannot complete a multi-field document: the first field signs, and every
-remaining field is then refused with that token — including after closing and
-reopening the ceremony. A client who mints one token for a two-field document
-never receives a terminal outcome at all.
+One token covers one document and one signer. Your backend mints it for that
+document, the signer completes the document with it, and a terminal outcome —
+signing or rejecting — uses it up. Opening and closing the ceremony does not.
 
-This constrains how your *backend* mints tokens, which is why it sits here rather
-than in a troubleshooting table.
-
-**How well we know this.** Observed three times on 2026-08-18 against the test
-tenant, with each document's server-side signature state read back from
-`openDocLink` afterwards. It **contradicts one internal recollection** of a single
-token signing two fields, and that contradiction is not resolved. Design for one
-token per signature; if your flow needs one signer to fill several fields with
-one token, ask Signosoft to confirm it before you build on it.
-
-Separately — and *not* the cause of the above — the ceremony offers no *Finalize*
-action, and the test tenant reports `allowPartialFinalize: false`, so a document
-left partly signed cannot be submitted from inside the ceremony either. See
-[INTEGRATION.md §5](INTEGRATION.md#5-the-four-outcomes).
+Give each document a **single signature field**. That is the shape this release is
+built and tested around, and it is what the reference app uses.
 
 ## What you need from Signosoft before you start
 

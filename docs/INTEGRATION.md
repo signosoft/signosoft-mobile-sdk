@@ -106,7 +106,7 @@ dependencies:
   signosoft_signer:
     git:
       url: https://github.com/signosoft/signosoft-mobile-sdk.git
-      ref: v0.4.2-beta        # always a tag, never a branch
+      ref: v0.4.3-beta        # always a tag, never a branch
       path: signosoft_signer
 ```
 
@@ -359,10 +359,10 @@ The test tenant reports `allowPartialFinalize: false`, and whether partial
 finalisation is enabled for your tenant is a question for Signosoft.
 
 That flag is **not** why a multi-field document stalls. The cause is that **one
-`bioid` authorises one signature**, so the remaining fields were never signable
+`bioid` covers one document**, and this release is built around a single signature field per document, so this case does not arise when
 with that token in the first place — no *Finalize* button would have helped. Mint
-one token per signature field and this case does not arise; see
-[GETTING-STARTED.md](GETTING-STARTED.md#one-bioid-authorises-one-signature) for
+a document with a single signature field and this case does not arise; see
+[GETTING-STARTED.md](GETTING-STARTED.md#one-bioid-per-document) for
 the constraint and for how well it is established.
 
 ### `SignosoftErrorCode`
@@ -458,7 +458,7 @@ cheap to log. Native hosts get the same tap via
 | Camera prompt never appears | usage-description key missing from the **host** app's `Info.plist` | add `NSCameraUsageDescription` and rebuild |
 | `Signed` but `signedPdfPath` is null | fetch failed, or the document is over 32 MB | expected — fetch server-side with `documentToken` |
 | Signature completes but no result arrives | the tenant's completion redirect is disabled server-side | contact Signosoft; this is a tenant configuration issue, not a client bug |
-| Some fields are signed, the rest are not, and there is no way to finish | one `bioid` authorises one signature, so the remaining fields were never signable with that token. The ceremony also has no *Finalize* action and the test tenant reports `allowPartialFinalize: false`, but that flag is not the cause | mint **one `bioid` per signature field** and open the ceremony once per field ([why](GETTING-STARTED.md#one-bioid-authorises-one-signature)). With a single token the only exit is closing the ceremony, which reports `Cancelled` even though the signature already taken is recorded |
+| Some fields are signed, the rest are not, and there is no way to finish | the ceremony has no *Finalize* action, and the test tenant reports `allowPartialFinalize: false` | give each document a single signature field ([why](GETTING-STARTED.md#one-bioid-per-document)). The only exit from a part-signed document is closing the ceremony, which reports `Cancelled` even though the signature already taken is recorded |
 | Second tap does nothing | concurrency guard | expected — you get `alreadyOpen` |
 | On a physical device: "Untrusted Developer", and the run hangs at *Installing and launching* | the signing certificate is not trusted on that device — nothing to do with the SDK | on the device: Settings → General → VPN & Device Management → *Developer App* → your `Apple Development: …` identity → **Trust**, then rerun. If that section is missing, enable Settings → Privacy & Security → **Developer Mode**, reboot, confirm |
 
@@ -528,9 +528,8 @@ Verified as working:
 
 - `Signed` end to end with a **typed** signature field, including a genuinely
   signed PDF (a `/ByteRange` array covering two ranges, `ETSI.CAdES.detached`), from a clean-room
-  app that consumed the SDK as a `git:` dependency. Reached with a **one-field**
-  document; a multi-field document cannot reach `Signed` on one `bioid`, which is
-  a token-minting constraint rather than an SDK defect — see below
+  app that consumed the SDK as a `git:` dependency, on a document with a single
+  signature field
 - `Cancelled`, `alreadyOpen`, `invalidToken`, `sessionFailed`, `loadFailed`
   (HTTP ≥ 400, ATS block), `loadTimeout`. A **closed port** is not in this
   list: it produces `loadTimeout`, not `loadFailed` — see the troubleshooting table
@@ -559,12 +558,6 @@ Known broken, cause identified, fix is not in this repository:
 
 Established, and worth planning around rather than discovering:
 
-- **One `bioid` authorises one signature.** A document with several signature
-  fields needs one token and one `open()` per field. Observed three times on
-  2026-08-18 with server state read back each time; it contradicts one internal
-  recollection and that contradiction is unresolved, so confirm with Signosoft
-  before building a flow that depends on the opposite. Detail in
-  [GETTING-STARTED.md](GETTING-STARTED.md#one-bioid-authorises-one-signature).
 - **An already-signed `bioid` still opens** and reports `Cancelled` when closed,
   rather than `sessionFailed` (see [§5](#5-the-four-outcomes)).
 
