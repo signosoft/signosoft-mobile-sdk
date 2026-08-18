@@ -64,6 +64,30 @@ public final class SignosoftSignerViewController: UIViewController {
         loadSigner()
     }
 
+    /// A signer that goes away without having reported anything would otherwise
+    /// leave the host's completion — and the Dart `Future` behind it — pending
+    /// forever, which permanently wedges `isPresenting` in the Flutter plugin and
+    /// makes every later `open()` answer `alreadyOpen`.
+    ///
+    /// Keyed on teardown specifically, not on merely disappearing: a system
+    /// permission alert or any other controller presented on top of the signer
+    /// also triggers `viewDidDisappear`, and that ceremony is still live.
+    /// `finish` is idempotent, so the normal report-then-dismiss path is
+    /// unaffected — this only fires when nothing else did.
+    ///
+    /// Reporting `.cancelled` here is knowingly optimistic. If the controller is
+    /// torn down after the document was signed server-side but before the bridge
+    /// message arrived, the host is told `cancelled` while the documentation
+    /// promises `Cancelled` means "server state unchanged". That is a real,
+    /// accepted imperfection, not an oversight: a distinct `Interrupted` outcome
+    /// would fix it, but adding a case to the public result type breaks every
+    /// consumer's `switch` at compile time and is a product decision.
+    override public func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        guard isBeingDismissed || isMovingFromParent else { return }
+        finish(.cancelled)
+    }
+
     private func setUpWebView() {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true

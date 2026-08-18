@@ -28,7 +28,13 @@ class SignerChannel {
     if (onDiagnostic != null) {
       _channel.setMethodCallHandler((call) async {
         if (call.method == 'diagnostic') {
-          onDiagnostic(parseDiagnostic(call.arguments));
+          // Diagnostics are a debugging aid and must never affect the session:
+          // a host callback that throws would otherwise surface as an unhandled
+          // async error attributed to the SDK, inside the handler the ceremony's
+          // own result travels through.
+          try {
+            onDiagnostic(parseDiagnostic(call.arguments));
+          } catch (_) {}
         }
       });
     }
@@ -55,6 +61,13 @@ class SignerChannel {
         'The Signosoft signer plugin is not registered in this app. '
         'Rebuild the iOS app after adding the dependency.',
       );
+    } catch (error) {
+      // Last resort, and additive on purpose: the branches above carry specific
+      // SignosoftErrorCodes that a generic catch would flatten to `unknown`.
+      // `open()` is documented never to throw, so a codec error or a reply that
+      // cannot be decoded has to come back as a result, not as an exception in
+      // the host's `await`.
+      return Failed(SignosoftErrorCode.unknown, 'The signer failed. $error');
     } finally {
       if (onDiagnostic != null) {
         _channel.setMethodCallHandler(null);
