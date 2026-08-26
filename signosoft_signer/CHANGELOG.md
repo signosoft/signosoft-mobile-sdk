@@ -18,6 +18,12 @@ of resolving to `Failed(unsupportedPlatform)`.
   unit-tested only, and there has been **no run on a physical Android device**.
   iOS is in the same position: simulator only.
 
+### Fixed
+
+- **Android: the signer's WebView is now detached before it is destroyed.**
+  Destroying an attached WebView is undefined behaviour on Android and could
+  take the renderer down under the compositor during teardown.
+
 ### Changed
 
 - `unsupportedPlatform` now means neither iOS nor Android — web and desktop

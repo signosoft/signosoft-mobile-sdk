@@ -106,6 +106,14 @@ class SignosoftSignerActivity : ComponentActivity() {
         cancelTimeout()
         if (::webView.isInitialized) {
             webView.removeJavascriptInterface(SignosoftBridge.NAME)
+            webView.stopLoading()
+            // destroy() on a WebView that is still in the view tree is
+            // undefined behaviour: WebView logs "destroy() called while
+            // WebView is still attached to window" and the renderer process
+            // can be torn down under the compositor, which takes the host
+            // app's process with it. Detach first, then destroy.
+            webView.webChromeClient = null
+            (webView.parent as? ViewGroup)?.removeView(webView)
             webView.destroy()
         }
         super.onDestroy()

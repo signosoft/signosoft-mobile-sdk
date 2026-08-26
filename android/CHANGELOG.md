@@ -68,6 +68,16 @@ On the Pixel 7 emulator (API 36, `google_apis`, arm64), against
   1.19 M base64 characters — and reaching the host as a local file under the
   shell-supplied name.
 
+### Fixed
+
+- **`WebView.destroy()` was called while the WebView was still in the view
+  tree.** Android logs *"destroy() called while WebView is still attached to
+  window"* for this and leaves the outcome undefined — the renderer can be torn
+  down under the compositor. `onDestroy` now stops loading, drops the chrome
+  client, removes the WebView from its parent and only then destroys it. Found
+  on an emulator teardown after a `loadTimeout`; the warning is gone and the
+  renderer process now exits cleanly.
+
 ### Known gaps
 
 - **No physical device run.** Everything above is the emulator. This is not a
