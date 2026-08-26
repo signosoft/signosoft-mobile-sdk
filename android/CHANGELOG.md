@@ -30,6 +30,11 @@ released with it and `signosoft_signer` 0.5.0-beta.
 - Unit tests: bridge parsing, `SignedInfo` coercion, the PDF store including
   path traversal and the ceiling, and the error-code wire format — which was
   held together by nothing but a comment across the three languages before.
+- Activity tests under Robolectric, covering the one class with a lifecycle:
+  the back button reporting `Cancelled`, an unusable `baseUrl` and an empty
+  token failing before the shell is opened, that no error message carries the
+  `bioid`, and that the WebView is detached from the view tree before it is
+  destroyed. 23 tests in the core suite.
 
 ### Behaviour Android needs and iOS does not
 

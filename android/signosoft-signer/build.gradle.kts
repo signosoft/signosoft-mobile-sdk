@@ -42,6 +42,7 @@ android {
 
     testOptions {
         unitTests {
+            isIncludeAndroidResources = true
             all {
                 it.useJUnitPlatform()
             }
@@ -62,6 +63,13 @@ dependencies {
     // Window insets: from Android 15 the ceremony draws under the system bars
     // unless it says otherwise.
     implementation("androidx.core:core:1.17.0")
+
+    // Robolectric runs the Activity on the JVM. It is a JUnit 4 runner, so the
+    // vintage engine carries it on the JUnit Platform the other suites use.
+    testImplementation("org.robolectric:robolectric:4.16")
+    testImplementation("junit:junit:4.13.2")
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.14.4")
+    testImplementation("androidx.test:core:1.7.0")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.junit.jupiter:junit-jupiter:5.14.4")
