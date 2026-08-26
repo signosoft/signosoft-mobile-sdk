@@ -1,5 +1,7 @@
 import Foundation
 
+//TODO: Move lookup keys into config files or plist
+
 /// One message from the embedded shell.
 ///
 /// Deliberately free of WebKit so the wire format can be tested off-device;
@@ -18,6 +20,8 @@ struct BridgeMessage {
         self.event = event
         self.data = payload["data"] as? [String: Any]
     }
+
+
 
     /// The payload with the signed PDF bytes elided, cheap enough to log.
     /// Diagnostics must never carry megabytes of base64 back across the bridge.

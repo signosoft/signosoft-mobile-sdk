@@ -2,6 +2,8 @@
 import UIKit
 import WebKit
 
+//NOTE: Consider switching from UIKit to SwiftUI 
+
 /// Hosts the embedded Angular shell and translates its bridge messages into
 /// `SignosoftSignerResult`.
 ///
@@ -9,7 +11,11 @@ import WebKit
 /// what makes `SignosoftSignerSheet` usable inside `.fullScreenCover`.
 public final class SignosoftSignerViewController: UIViewController {
     /// Must match the name `HostBridgeService` posts to on iOS.
-    private static let handlerName = "signosoft"
+    private static let handlerName = "signosoft" //WARN: Load from configuration
+
+    /// Names the app-switcher cover in the view hierarchy, so a test can see
+    /// the same thing the snapshot would.
+    static let privacyCoverIdentifier = "signosoft.privacyCover"
 
     /// How long the shell may take to report itself ready.
     public static let defaultLoadTimeout: TimeInterval = 45
@@ -28,6 +34,8 @@ public final class SignosoftSignerViewController: UIViewController {
     private let spinner = UIActivityIndicatorView(style: .large)
     private var timeoutTimer: Timer?
     private var didFinish = false
+    /// Hides the ceremony from the app switcher's snapshot. See `setUpPrivacyCover`.
+    private var privacyCover: UIView?
 
     public init(
         token: String,
@@ -49,6 +57,7 @@ public final class SignosoftSignerViewController: UIViewController {
 
     deinit {
         timeoutTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
         webView?.configuration.userContentController
             .removeScriptMessageHandler(forName: Self.handlerName)
     }
@@ -59,13 +68,43 @@ public final class SignosoftSignerViewController: UIViewController {
 
         setUpWebView()
         setUpOverlay()
+        setUpPrivacyCover()
         loadSigner()
+    }
+
+    /// A signer that goes away without having reported anything would otherwise
+    /// leave the host's completion — and the Dart `Future` behind it — pending
+    /// forever, which permanently wedges `isPresenting` in the Flutter plugin and
+    /// makes every later `open()` answer `alreadyOpen`.
+    ///
+    /// Keyed on teardown specifically, not on merely disappearing: a system
+    /// permission alert or any other controller presented on top of the signer
+    /// also triggers `viewDidDisappear`, and that ceremony is still live.
+    /// `finish` is idempotent, so the normal report-then-dismiss path is
+    /// unaffected — this only fires when nothing else did.
+    ///
+    /// Reporting `.cancelled` here is knowingly optimistic. If the controller is
+    /// torn down after the document was signed server-side but before the bridge
+    /// message arrived, the host is told `cancelled` while the documentation
+    /// promises `Cancelled` means "server state unchanged". That is a real,
+    /// accepted imperfection, not an oversight: a distinct `Interrupted` outcome
+    /// would fix it, but adding a case to the public result type breaks every
+    /// consumer's `switch` at compile time and is a product decision.
+    override public func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        guard isBeingDismissed || isMovingFromParent else { return }
+        finish(.cancelled)
     }
 
     private func setUpWebView() {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
+        // Cookies and local storage from a ceremony must not outlive it, and
+        // must not be readable by any other WebView the host app runs: the
+        // default store persists to disk and is shared across the whole app.
+        // Every ceremony gets a fresh bioid, so nothing needs to survive.
+        configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.add(
             WeakScriptMessageHandler(self),
             name: Self.handlerName
@@ -76,10 +115,16 @@ public final class SignosoftSignerViewController: UIViewController {
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = false
         webView.translatesAutoresizingMaskIntoConstraints = false
+        #if DEBUG
         if #available(iOS 16.4, *) {
-            // Lets you attach Safari's Web Inspector to the WebView.
+            // Lets you attach Safari's Web Inspector to the WebView. Debug
+            // builds only: in a release build this would hand anyone with the
+            // device and a USB Mac the bioid and the bridge — including the
+            // signer, whose identity the ceremony is asserting. The Android
+            // side gates the same capability behind FLAG_DEBUGGABLE.
             webView.isInspectable = true
         }
+        #endif
 
         view.addSubview(webView)
         NSLayoutConstraint.activate([
@@ -115,12 +160,82 @@ public final class SignosoftSignerViewController: UIViewController {
         ])
     }
 
+    /// iOS writes a screenshot of the app to disk when it goes to the
+    /// background, and that snapshot shows whatever is on screen: a medical
+    /// document and a handwritten signature. The Android side sets FLAG_SECURE
+    /// for the same reason.
+    private func setUpPrivacyCover() {
+        let centre = NotificationCenter.default
+        centre.addObserver(
+            self,
+            selector: #selector(showPrivacyCover),
+            name: UIApplication.willResignActiveNotification,
+            object: nil
+        )
+        centre.addObserver(
+            self,
+            selector: #selector(hidePrivacyCover),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+
+    @objc private func showPrivacyCover() {
+        guard privacyCover == nil, isViewLoaded else { return }
+        let cover = UIView(frame: view.bounds)
+        cover.backgroundColor = .systemBackground
+        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        cover.accessibilityIdentifier = Self.privacyCoverIdentifier
+        view.addSubview(cover)
+        privacyCover = cover
+    }
+
+    @objc private func hidePrivacyCover() {
+        privacyCover?.removeFromSuperview()
+        privacyCover = nil
+    }
+
+    /// Never put a raw URL into a message a host will log or paste into a bug
+    /// report. The `bioid` travels in the query string, it is a credential that
+    /// signs the document, and `GETTING-STARTED.md` asks integrators to send us
+    /// the message when something goes wrong. Scheme, host, port and path are
+    /// what actually help a developer.
+    private static func withoutQuery(_ url: URL?) -> String? {
+        guard let url,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.query = nil
+        components.fragment = nil
+        return components.url?.absoluteString
+    }
+
+    /// Belt and braces behind `withoutQuery`, and the reason every failure goes
+    /// through here rather than calling `finish` directly: text we did not write
+    /// ourselves — `error.localizedDescription`, most of all — can carry the URL
+    /// we loaded. Stripping the token on the way out means a message added later
+    /// is safe by default instead of safe only if its author remembered.
+    private func fail(_ code: SignosoftErrorCode, _ message: String) {
+        let safe = token.isEmpty
+            ? message
+            : message.replacingOccurrences(of: token, with: "<redacted>")
+        finish(.error(SignosoftError(code: code, message: safe)))
+    }
+
     private func loadSigner() {
+        // Rejected here rather than after a failed network load, so a bad
+        // origin reports `invalidBaseUrl` immediately instead of a `loadFailed`
+        // that arrives seconds later and blames the network. It is also what
+        // stops a cleartext origin from ever carrying the bioid.
+        guard SignosoftSigner.isUsableBaseURL(baseURL) else {
+            fail(.invalidBaseUrl,
+                 "baseUrl must be an https:// origin with a host — got "
+                 + "\(Self.withoutQuery(baseURL) ?? "the value you passed"). "
+                 + "Plain http:// is accepted only for localhost while developing.")
+            return
+        }
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            finish(.error(SignosoftError(
-                code: .invalidBaseUrl,
-                message: "Invalid base URL: \(baseURL.absoluteString)"
-            )))
+            fail(.invalidBaseUrl,
+                 "Invalid base URL: \(Self.withoutQuery(baseURL) ?? "the value you passed")")
             return
         }
         // Angular is served from the root; an empty path would produce
@@ -131,10 +246,9 @@ public final class SignosoftSignerViewController: UIViewController {
         components.queryItems = [URLQueryItem(name: "bioid", value: token)]
 
         guard let url = components.url else {
-            finish(.error(SignosoftError(
-                code: .invalidBaseUrl,
-                message: "Could not build a signer URL from \(baseURL.absoluteString)"
-            )))
+            fail(.invalidBaseUrl,
+                 "Could not build a signer URL from "
+                 + "\(Self.withoutQuery(baseURL) ?? "the value you passed")")
             return
         }
 
@@ -151,12 +265,10 @@ public final class SignosoftSignerViewController: UIViewController {
             repeats: false
         ) { [weak self] _ in
             guard let self else { return }
-            self.finish(.error(SignosoftError(
-                code: .loadTimeout,
-                message: "The signing page did not become ready within "
-                    + "\(Int(self.loadTimeout))s. Check that baseUrl points at a "
-                    + "reachable Signosoft signing shell."
-            )))
+            self.fail(.loadTimeout,
+                      "The signing page did not become ready within "
+                      + "\(Int(self.loadTimeout))s. Check that baseUrl points at a "
+                      + "reachable Signosoft signing shell.")
         }
     }
 
@@ -169,6 +281,13 @@ public final class SignosoftSignerViewController: UIViewController {
         didFinish = true
         timeoutTimer?.invalidate()
         timeoutTimer = nil
+        // Tear the page down rather than leave it running. It may hold a camera
+        // or a microphone stream, and this controller deliberately never
+        // dismisses itself — a host that reports the result but forgets to flip
+        // its `.fullScreenCover` binding would otherwise leave a live ceremony
+        // running unbounded.
+        webView?.stopLoading()
+        webView?.loadHTMLString("", baseURL: nil)
         onResult(result)
     }
 }
@@ -193,19 +312,49 @@ extension SignosoftSignerViewController: WKScriptMessageHandler {
             spinner.stopAnimating()
             spinner.isHidden = true
         case "signed":
-            finish(.signed(SignedInfo(bridgeData: bridgeMessage.data, pdfStore: pdfStore)))
+            deliverOutcome(bridgeMessage.data, as: SignosoftSignerResult.signed)
         case "rejected":
-            finish(.rejected(SignedInfo(bridgeData: bridgeMessage.data, pdfStore: pdfStore)))
+            deliverOutcome(bridgeMessage.data, as: SignosoftSignerResult.rejected)
         case "cancelled":
             finish(.cancelled)
         case "error":
-            finish(.error(SignosoftError(
-                code: .sessionFailed,
-                message: bridgeMessage.data?["message"] as? String
-                    ?? "The signing session could not be established."
-            )))
+            fail(.sessionFailed,
+                 bridgeMessage.data?["message"] as? String
+                 ?? "The signing session could not be established.")
         default:
             break
+        }
+    }
+
+    /// Builds the outcome off the main thread and reports it back on it.
+    ///
+    /// Decoding up to 32 MB of base64 and writing it to disk is the most
+    /// expensive thing the SDK does, and it landed on the main thread because
+    /// that is where WebKit delivers bridge messages — freezing the UI at the
+    /// exact moment the signer is waiting for confirmation.
+    private func deliverOutcome(
+        _ data: [String: Any]?,
+        as makeResult: @escaping (SignedInfo) -> SignosoftSignerResult
+    ) {
+        guard !didFinish else { return }
+        let store = pdfStore
+        DispatchQueue.global(qos: .userInitiated).async {
+            let info = SignedInfo(bridgeData: data, pdfStore: store)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                // Every other field may safely default — losing a signer's
+                // middle name must not lose a signature. `documentToken` may
+                // not: it is the only handle the host has on the document, and
+                // a blank one turns a completed ceremony into a backend call
+                // for nothing. Better a loud failure than a hollow success.
+                guard !info.documentToken.isEmpty else {
+                    self.fail(.sessionFailed,
+                              "The signing shell reported an outcome with no "
+                              + "documentToken, so the document cannot be identified.")
+                    return
+                }
+                self.finish(makeResult(info))
+            }
         }
     }
 }
@@ -245,32 +394,25 @@ extension SignosoftSignerViewController: WKNavigationDelegate {
               response.statusCode >= 400
         else { return }
 
-        finish(.error(SignosoftError(
-            code: .loadFailed,
-            message: "The signing shell answered HTTP \(response.statusCode) at "
-                + "\(response.url?.absoluteString ?? baseURL.absoluteString). "
-                + "Check that baseUrl points at the root of a deployed shell."
-        )))
+        fail(.loadFailed,
+             "The signing shell answered HTTP \(response.statusCode) at "
+             + "\(Self.withoutQuery(response.url) ?? Self.withoutQuery(baseURL) ?? "the signing shell"). "
+             + "Check that baseUrl points at the root of a deployed shell.")
     }
 
     private func reportLoadFailure(_ error: Error) {
         // Superseded or user-cancelled loads are not failures worth reporting.
         if (error as NSError).code == NSURLErrorCancelled { return }
-        finish(.error(SignosoftError(
-            code: .loadFailed,
-            message: "Could not load the signing page. \(error.localizedDescription)"
-        )))
+        fail(.loadFailed, "Could not load the signing page. \(error.localizedDescription)")
     }
 
     /// The WebView's content process can be killed under memory pressure — most
     /// plausibly by a large document. The page is gone and will not come back
     /// on its own, so report rather than leave a white screen.
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        finish(.error(SignosoftError(
-            code: .loadFailed,
-            message: "The signing page stopped unexpectedly, most likely from "
-                + "memory pressure. The signature was not recorded."
-        )))
+        fail(.loadFailed,
+             "The signing page stopped unexpectedly, most likely from memory "
+             + "pressure. The signature was not recorded.")
     }
 }
 

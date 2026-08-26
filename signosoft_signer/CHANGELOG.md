@@ -1,42 +1,140 @@
 # Changelog — signosoft_signer (Flutter)
 
-## 0.4.0-alpha
+## 0.5.0-beta
 
-Android. **No API change** — every 0.3 call site compiles unmodified, and the
-result types, error codes and diagnostics are identical on both platforms.
+**Android is supported.** `open()` on Android now presents the ceremony instead
+of resolving to `Failed(unsupportedPlatform)`.
 
 ### Added
 
-- **Android support.** `open()` no longer returns `unsupportedPlatform` on
-  Android; it opens the same ceremony against a new Kotlin core in `android/`.
-  See `android/CHANGELOG.md` for what that core does and does not do.
-- The plugin's Android module compiles the Kotlin core out of the sibling
-  `android/` directory through a Gradle source directory — the counterpart of
-  the symlink iOS uses, and just as dependent on the two staying siblings.
-- Android platform folders for both example apps, with the `CAMERA` and
-  `RECORD_AUDIO` declarations and the development network security config that
-  mirror their `Info.plist` keys.
-- Continuous integration for Android on a Linux runner: Kotlin core tests, a
-  debug APK of the Medicly example — the check that exercises the plugin, the
-  shared source directory and the merged manifest the way a customer's build
-  does — and the plugin's own Android unit tests.
+- **The Android side of the plugin**, backed by the new Kotlin core in
+  `android/` (see [its changelog](../android/CHANGELOG.md)). The Dart API is
+  unchanged: the same `open()`, the same four outcomes, the same ten error
+  codes, the same `onDiagnostic`.
+- One `Signed` ceremony has been completed on an Android emulator against the
+  hosted shell, returning a `documentToken` and a genuinely signed PDF, and
+  `Cancelled` has been driven from the system back button. That is the whole of
+  what has been verified live on Android — the rest of the outcomes are
+  unit-tested only, and there has been **no run on a physical Android device**.
+  iOS is in the same position: simulator only.
 
 ### Changed
 
-- `unsupportedPlatform` now means "not iOS and not Android".
-- `noPresenter` covers a missing activity as well as a missing view controller.
-- Documentation is per platform throughout: §2 of the integration guide covers
-  Android manifest permissions alongside `Info.plist`, and Known limitations
-  separates what is verified on iOS from the much shorter Android list.
+- `unsupportedPlatform` now means neither iOS nor Android — web and desktop
+  builds. Hosts that branched on it for Android will stop seeing it there.
+- Doc comments and the `notRegistered` message say "native app" rather than
+  "iOS app".
 
 ### Still open
 
-- **The signing shell is not hosted.** `baseUrl` stays required.
-- **Android has never been run.** It compiles and its unit tests pass; the
-  ceremony has not been displayed on an emulator or a device, and the shell's
-  `window.SignosoftAndroid` branch has never been exercised.
+- No physical-device run on either platform.
+- Camera-based signature methods remain unverified everywhere: they cannot run
+  on the iOS Simulator, and they were not exercised on the Android emulator.
+- Handwritten (signature-pad) fields still cannot be completed from
+  `https://www.signosoft.com/mobilesdk/` — a server-side licence-allowlist
+  issue, unchanged by this release and identical on both platforms.
+
+## 0.4.3-beta
+
+First beta. **No API change** — every 0.3 call site compiles unmodified. Behaviours
+the documentation promised and the code did not honour now do, no error message can
+leak the signing token, the shell has an address you can pass, and the layer that
+drives the WebView has tests for the first time.
+
+### Fixed
+
+- **No error message carries the `bioid`.** A failure raised after the shell had
+  been reached built its message from the URL the SDK loaded, and the token travels
+  in that URL's query string. Since a `bioid` is a credential that signs the
+  document, and since this guide asks you to send us the message when reporting a
+  bug, that would have put a working credential into bug reports and device logs.
+  URLs in messages now carry scheme, host, port and path only, and the token is
+  stripped from every message on the way out — including messages written by the
+  signing shell rather than by the SDK.
+
+- **`open()` really never throws.** It is documented never to throw, and it
+  could: the channel translated `PlatformException` and `MissingPluginException`
+  only, so anything else — a codec error, for instance — escaped into the
+  caller's `await`. A catch-all now returns `Failed(unknown, …)`; the specific
+  error codes are unchanged. A host `onDiagnostic` callback that throws can no
+  longer affect the session either.
+- **A signer that disappears without reporting now answers `Cancelled`.** If the
+  ceremony was torn down without a terminal result — the host popping its own
+  navigation stack, for example — the `Future` from `open()` never completed, and
+  because the plugin still believed a ceremony was on screen, *every* later
+  `open()` returned `Failed(alreadyOpen)` for the rest of the app's lifetime.
+  A ceremony interrupted this way is reported as `Cancelled`, which is
+  deliberately optimistic: it is the outcome a host can act on, and the Swift
+  side keeps a comment explaining why no separate `Interrupted` variant was
+  added. An alert or permission prompt presented *over* a live ceremony does not
+  cancel it.
+
+### Changed
+
+- **`baseUrl` is validated before the ceremony opens.** It must be an `https://`
+  origin with a host; plain `http://` is accepted only for `localhost`,
+  `*.localhost`, `127.0.0.1`, `::1` and `10.0.2.2` while developing. Anything else
+  resolves to `Failed(invalidBaseUrl)` immediately, before the signer appears,
+  instead of loading and failing seconds later as `loadFailed` — which blamed the
+  network for what was usually a typo. A public `http://` origin is now rejected
+  outright rather than attempted: it is not a secure context, so WebCrypto does
+  not exist there and a signature could never have completed over it. This
+  supersedes the guidance that a LAN IP over plain HTTP works for development on a
+  device; serve the shell over `https://` instead.
+- **An outcome carrying an empty `documentToken` resolves to
+  `Failed(sessionFailed)`, not `Signed`.** Parsing still tolerates every other
+  missing or mistyped field on purpose — a malformed middle name must never lose a
+  completed signature — but `documentToken` is the only handle a host has on the
+  document, so a blank one turned a finished ceremony into a backend call for
+  nothing. A loud failure beats a hollow success.
+- **The signing shell is hosted.** `baseUrl` is
+  `https://www.signosoft.com/mobilesdk/`; the READMEs, both guides and the
+  examples now name it instead of telling integrators to ask for a URL. This
+  supersedes the "signing shell is not hosted" entry under 0.3.0-alpha, which was
+  true when written. The parameter stays required — no API change.
+- The Medicly example defaults `BASE_URL` to that origin, so a run needs only
+  `--dart-define=BIOID=…`. The plugin example prefills its `baseUrl` field.
+- **The Medicly example is usable on a phone.** Below 900pt the header overflowed,
+  nothing scrolled and the Sign button could not be reached at all — invisible on
+  an iPad, which is why it went unnoticed. Text scaling is now pinned per Material
+  width class, so the iPad's across-the-room 2x is preserved exactly while a phone
+  gets a compact toolbar, a height-capped panel that scrolls inside its own box,
+  and a Sign button that cannot be scrolled away.
+- **The bare `example/` no longer looks like a broken SDK.** Its Sign button was
+  enabled with an empty token, so tapping it returned `Failed(invalidToken)`; it
+  is now disabled until a token is present and says why. The outcome card passed a
+  translucent tint to an elevated `Card`, which paints through a shape layer that
+  ignores alpha — it rendered as a solid slab with an unreadable title, and the
+  tint is now blended down to an opaque colour. The keyboard is dismissed before
+  signing, since on a phone the result renders behind it.
+- The client guides describe what the SDK actually does today: the handwritten
+  signature-field limitation with its cause and its remedies, the demo's width
+  classes, and the fact that no run on physical hardware has happened yet.
+
+### Added
+
+- **The iOS view-controller layer is tested.** `swift test` runs on macOS, where
+  every `#if canImport(UIKit)` source compiles out, so the WebView, the bridge
+  dispatch, the timeout watchdog and the HTTP-error path had no coverage beyond
+  "it compiles". They now run on an iOS Simulator destination in CI on every
+  push. No production code was changed to make them testable.
+- First widget tests for both examples — the Medicly layout at phone and tablet
+  widths, and the bare example's four outcomes and its guarded Sign button.
+
+### Still open
+
 - `downloadUrl` remains null; fetch the PDF server-side with `documentToken`.
-- `Rejected` is unit-tested on every layer but never exercised end to end.
+- **The handwritten (pad) signature field cannot be completed** from the hosted
+  shell. The pad's driver is gated by an origin allowlist carried in its licence,
+  and the shell's origin is not on it — so the pad reports a connection error and
+  Confirm stays disabled. Reproduced in a plain desktop browser, so it is neither
+  the SDK nor the WebView. Both remedies are server-side and need no code from
+  you; use the typed `simple` field, whose Draw tab also accepts a handwritten
+  signature. `docs/INTEGRATION.md` has the detail.
+- `Rejected` is unit-tested on all three layers but still never exercised end to
+  end.
+- Simulator only — no physical-device, camera or hardware-pad verification. It is
+  planned, not done.
 
 ## 0.3.0-alpha
 
@@ -52,7 +150,7 @@ depend on, and the archive route is gone.
   signosoft_signer:
     git:
       url: git@github.com:signosoft/signosoft-mobile-sdk.git
-      ref: v0.3.0-alpha
+      ref: v0.4.3-beta
       path: signosoft_signer
   ```
 

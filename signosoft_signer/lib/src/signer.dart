@@ -12,15 +12,33 @@ abstract final class SignosoftSigner {
   /// Opens the Signosoft signature ceremony full screen and resolves once the
   /// signer is done.
   ///
-  /// [token] is the `bioid` your backend obtained from `createDocLink`.
-  /// [baseUrl] is the origin serving the Signosoft embedded signing shell.
+  /// [token] is the `bioid` your backend obtained from `createDocLink`. One
+  /// `bioid` covers one document and one signer. Give each document a single
+  /// signature field — the shape this release is built and tested around.
+  ///
+  /// [baseUrl] is the origin serving the Signosoft embedded signing shell. It
+  /// must be an `https://` origin with a host. Plain `http://` is accepted only
+  /// for `localhost`, `*.localhost`, `127.0.0.1`, `::1` and `10.0.2.2` while
+  /// developing; anything else resolves to
+  /// [SignosoftErrorCode.invalidBaseUrl] immediately, before the signer appears.
+  /// A public `http://` origin is rejected outright, and could not complete a
+  /// signature anyway: it is not a secure context, so WebCrypto does not exist
+  /// there.
+  ///
   /// [loadTimeout] bounds how long the shell may take to become interactive
   /// before the session gives up with [SignosoftErrorCode.loadTimeout].
+  ///
   /// [onDiagnostic] receives raw bridge messages; it is for debugging an
-  /// integration, not for product logic.
+  /// integration, not for product logic. A callback that throws cannot affect
+  /// the session.
   ///
   /// Never throws. Every failure resolves to [Failed] with a
-  /// [SignosoftErrorCode] you can branch on.
+  /// [SignosoftErrorCode] you can branch on, including anything unanticipated,
+  /// which arrives as [SignosoftErrorCode.unknown].
+  ///
+  /// An outcome the shell reports with no `documentToken` resolves to
+  /// [Failed] with [SignosoftErrorCode.sessionFailed] rather than [Signed] —
+  /// the token is the only handle you have on the document.
   static Future<SignosoftSignResult> open({
     required String token,
     required Uri baseUrl,

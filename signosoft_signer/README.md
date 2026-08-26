@@ -1,7 +1,7 @@
 # signosoft_signer
 
 Flutter binding for the Signosoft Mobile SDK. Opens the Signosoft signature
-ceremony inside your app and returns a typed result. **iOS only** in this phase.
+ceremony inside your app and returns a typed result. **iOS and Android.**
 
 Full guide — install, `Info.plist`, App Transport Security, outcomes,
 troubleshooting: [`../docs/INTEGRATION.md`](../docs/INTEGRATION.md).
@@ -10,7 +10,7 @@ New to the SDK: [`../docs/GETTING-STARTED.md`](../docs/GETTING-STARTED.md).
 ```dart
 final result = await SignosoftSigner.open(
   token: bioid,
-  baseUrl: Uri.parse('https://embed.example.com'),
+  baseUrl: Uri.parse('https://www.signosoft.com/mobilesdk/'),
 );
 
 switch (result) {

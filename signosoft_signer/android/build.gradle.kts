@@ -21,7 +21,7 @@ plugins {
 }
 
 group = "com.signosoft.signer.flutter"
-version = "0.4.0-alpha"
+version = "0.5.0-beta"
 
 // The one copy of the Kotlin core, in the sibling directory a native Android
 // host consumes directly. Gradle resolves a source directory outside the

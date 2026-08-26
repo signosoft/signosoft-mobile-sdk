@@ -55,6 +55,27 @@ final class SignedPdfStoreTests: XCTestCase {
         XCTAssertEqual(url.lastPathComponent, "evil.pdf")
     }
 
+    /// A signed medical document must not be readable while the device is
+    /// locked. The simulator has no data protection at all, so there the
+    /// attribute is absent and there is nothing to assert — only a device run
+    /// proves this one.
+    func testWritesWithCompleteFileProtectionOnIOS() throws {
+        #if os(iOS)
+        let store = SignedPdfStore(directory: directory)
+        let url = try XCTUnwrap(store.write(
+            base64: Data("%PDF-1.7 signed".utf8).base64EncodedString(),
+            fileName: "protected.pdf"
+        ))
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let protection = attributes[.protectionKey] as? FileProtectionType
+        try XCTSkipIf(protection == nil, "this filesystem reports no protection class")
+        XCTAssertEqual(protection, .complete)
+        #else
+        throw XCTSkip("file protection is an iOS API")
+        #endif
+    }
+
     func testSafeNameFallsBackForPathologicalNames() {
         XCTAssertEqual(SignedPdfStore.safeName(nil), "document.pdf")
         XCTAssertEqual(SignedPdfStore.safeName(""), "document.pdf")

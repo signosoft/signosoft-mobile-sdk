@@ -32,7 +32,9 @@ struct SignedPdfStore {
 
     func write(base64: String?, fileName: String?) -> URL? {
         guard let base64, !base64.isEmpty else { return nil }
-        // Four base64 characters carry three bytes; check before allocating.
+        // Four base64 characters carry three bytes. Integer division rounds
+        // down, so this can only ever under-estimate — it is an allocation
+        // guard, and the exact check on `data.count` below is the real ceiling.
         guard base64.count / 4 * 3 <= maximumBytes else { return nil }
         guard let data = Data(base64Encoded: base64), !data.isEmpty,
               data.count <= maximumBytes
@@ -40,17 +42,31 @@ struct SignedPdfStore {
 
         let url = directory.appendingPathComponent(Self.safeName(fileName))
         do {
-            try data.write(to: url, options: .atomic)
+            try data.write(to: url, options: Self.writingOptions)
             return url
         } catch {
             return nil
         }
     }
 
+    /// A signed medical document should not be readable while the device is
+    /// locked. The default class is `completeUntilFirstUserAuthentication`,
+    /// which keeps it readable from first unlock until reboot.
+    ///
+    /// File protection is an iOS API; on macOS, where `swift test` runs, the
+    /// option does not exist and the write is plain.
+    private static var writingOptions: Data.WritingOptions {
+        #if os(iOS)
+        return [.atomic, .completeFileProtection]
+        #else
+        return [.atomic]
+        #endif
+    }
+
     /// The shell supplies the document's own name, so it is never trusted as a
     /// path: only the last component survives, and it may not walk upwards.
     static func safeName(_ fileName: String?) -> String {
-        let fallback = "document.pdf"
+        let fallback = "document.pdf" //TODO: Sync this with some configuration list
         guard let last = fileName?.split(separator: "/").last else { return fallback }
 
         let name = String(last)

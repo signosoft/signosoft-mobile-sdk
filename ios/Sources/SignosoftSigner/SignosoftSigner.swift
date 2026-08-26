@@ -32,5 +32,14 @@ public enum SignosoftSigner {
         controller.onEvent = onEvent
         presenter.present(controller, animated: true)
     }
+
+    /// Whether the signer can load this origin at all: an `https://` origin with
+    /// a host, or `http://` for loopback while developing.
+    ///
+    /// Exposed so a host can reject a misconfigured origin before opening the
+    /// ceremony. `present` checks it anyway and reports `invalidBaseUrl`.
+    public static func isUsableBaseURL(_ url: URL) -> Bool {
+        ShellOrigin.isUsable(url)
+    }
 }
 #endif

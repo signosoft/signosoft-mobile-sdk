@@ -26,6 +26,30 @@ jobs:
         working-directory: ios
         run: swift test
 
+      # `swift test` above runs on macOS, where every `#if canImport(UIKit)`
+      # source is compiled out — the view controller, the bridge dispatch, the
+      # timeout watchdog and the HTTP-error path are all invisible to it. A
+      # simulator destination is the only one that both compiles and runs them.
+      #
+      # Two to three minutes of a macos runner, billed at 10x on a private repo.
+      # Kept on every push anyway, unlike example-build below: it is the only
+      # job that executes the WebView layer at all, and work lands on dev by
+      # direct push, so an `event_name != 'push'` gate would mean it almost
+      # never ran.
+      - name: View controller tests on an iOS Simulator
+        working-directory: ios
+        run: |
+          # Whichever iPhone this runner image ships — a hard-coded device name
+          # breaks the day GitHub rolls the image's Xcode forward.
+          udid=$(xcrun simctl list devices available \
+            | awk '/^-- iOS/ { ios = 1; next } /^-- / { ios = 0 } ios && /iPhone/ { print; exit }' \
+            | grep -oE '[0-9A-F-]{36}' || true)
+          test -n "$udid" || { echo "::error::no iOS Simulator runtime on this runner"; exit 1; }
+          xcrun simctl list devices available | grep "$udid"
+          xcodebuild test \
+            -scheme SignosoftSigner \
+            -destination "platform=iOS Simulator,id=$udid"
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.44.8

@@ -23,7 +23,7 @@ plugins {
 }
 
 group = "com.signosoft.signer"
-version = "0.4.0-alpha"
+version = "0.5.0-beta"
 
 android {
     namespace = "com.signosoft.signer"
