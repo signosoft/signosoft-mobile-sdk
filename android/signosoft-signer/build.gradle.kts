@@ -63,6 +63,9 @@ dependencies {
     // Window insets: from Android 15 the ceremony draws under the system bars
     // unless it says otherwise.
     implementation("androidx.core:core:1.17.0")
+    // WebView profiles: the ceremony runs in its own storage partition rather
+    // than the host app's shared one. See SignerProfile.
+    implementation("androidx.webkit:webkit:1.14.0")
 
     // Robolectric runs the Activity on the JVM. It is a JUnit 4 runner, so the
     // vintage engine carries it on the JUnit Platform the other suites use.

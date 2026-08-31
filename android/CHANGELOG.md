@@ -14,6 +14,9 @@ released with it and `signosoft_signer` 0.5.0-beta.
 - `SignosoftSigner.createIntent` / `parseResult` for hosts that drive activity
   results themselves, and `SignosoftSignerActivity` for hosts that manage
   presentation.
+- `SignosoftSigner.isStorageIsolationAvailable()` — whether this device's
+  WebView can give the ceremony its own storage partition. See *Fixed* below for
+  why it can be false and what happens then.
 - `SignosoftSignerResult` — `Signed`, `Rejected`, `Cancelled`, `Failed`. Unlike
   Swift's `.error(Error)`, the failure case carries the `SignosoftErrorCode` and
   message directly; there is no `SignosoftError` type to unwrap.
@@ -30,11 +33,17 @@ released with it and `signosoft_signer` 0.5.0-beta.
 - Unit tests: bridge parsing, `SignedInfo` coercion, the PDF store including
   path traversal and the ceiling, and the error-code wire format — which was
   held together by nothing but a comment across the three languages before.
+- 20 further activity tests under Robolectric: every bridge outcome, `ready` as
+  non-terminal, unknown and malformed payloads, that only the first terminal
+  event is reported, the load watchdog firing and being cancelled by `ready` and
+  by a terminal outcome, that the signed PDF never reaches the diagnostic tap as
+  bytes, that no diagnostic or error message carries the `bioid`, and the
+  `createIntent`/`parseResult` contract. 43 tests in the core suite.
 - Activity tests under Robolectric, covering the one class with a lifecycle:
   the back button reporting `Cancelled`, an unusable `baseUrl` and an empty
   token failing before the shell is opened, that no error message carries the
   `bioid`, and that the WebView is detached from the view tree before it is
-  destroyed. 23 tests in the core suite.
+  destroyed.
 
 ### Behaviour Android needs and iOS does not
 
@@ -75,6 +84,27 @@ On the Pixel 7 emulator (API 36, `google_apis`, arm64), against
 
 ### Fixed
 
+- **Ceremony data no longer outlives the ceremony.** Each ceremony now runs in
+  its own WebView profile — a storage partition with its own cookies, local
+  storage and cache — deleted when the ceremony ends, with orphans from a killed
+  process collected on the next start. This closes the divergence from the Swift
+  core, which has always used a non-persistent `WKWebsiteDataStore`.
+
+  The process-wide calls (`CookieManager`, `WebStorage`, `WebView.clearCache`)
+  were not an option: an SDK calling them would delete the host app's WebView
+  data too. Profiles need WebView 114 or newer, which is a provider question
+  rather than a `minSdk` one; where absent, the ceremony uses the host's default
+  storage as before and `isStorageIsolationAvailable()` returns false.
+
+  It has a cost: nothing is cached between ceremonies, so every ceremony
+  re-downloads the shell. Two consecutive ceremonies measured 3733 KB and
+  3728 KB. iOS has always behaved this way.
+- **An outcome with an empty `documentToken` is a failure, not a signature.** It
+  now ends in `Failed(SESSION_FAILED)`, matching the Swift core and the contract
+  the Dart API documents. Every other `SignedInfo` field may safely default —
+  losing a signer's middle name must not lose a signature — but that one is the
+  only handle the host has on the document, and a blank one turned a completed
+  ceremony into a backend call for nothing.
 - **`WebView.destroy()` was called while the WebView was still in the view
   tree.** Android logs *"destroy() called while WebView is still attached to
   window"* for this and leaves the outcome undefined — the renderer can be torn
@@ -87,13 +117,11 @@ On the Pixel 7 emulator (API 36, `google_apis`, arm64), against
 
 - **No physical device run.** Everything above is the emulator. This is not a
   weaker position than iOS, which has had no device run either.
-- **The WebView is not isolated per ceremony, and iOS's is.** iOS gives each
-  ceremony a non-persistent `WKWebsiteDataStore`; this core uses the host app's
-  default WebView profile, so cookies, local storage and cached assets outlive
-  the ceremony and are shared with the host's other WebViews. Deliberate for now
-  and documented in the integration guide's privacy section — it makes repeat
-  opens much faster — but it is a real divergence and the condition behind the
-  stale-cache `DOC_LINK_NOT_EXIST` symptom that the iOS change removed.
+- **Storage isolation depends on the WebView provider, not on `minSdk`.** It
+  needs WebView 114 or newer. Where that is missing the ceremony falls back to
+  the host app's default WebView storage and its data outlives the ceremony;
+  `isStorageIsolationAvailable()` reports which case a device is in. The
+  fallback has not been exercised — every device tested had a current WebView.
 - **Emulator load times are not representative, and real-device load time is
   unmeasured.** A first ceremony on a freshly booted emulator timed out at
   45.3 s; later opens reached `ready` in 15–20 s. Profiling put the cost in the

@@ -54,6 +54,9 @@ class SignosoftSignerActivity : ComponentActivity() {
     private var timeout: Runnable? = null
     private var didFinish = false
 
+    /** Storage partition for this ceremony; null where WebView cannot make one. */
+    private var profileName: String? = null
+
     private var pendingPermission: PermissionRequest? = null
     private var pendingFileChooser: ValueCallback<Array<Uri>>? = null
 
@@ -115,6 +118,10 @@ class SignosoftSignerActivity : ComponentActivity() {
             webView.webChromeClient = null
             (webView.parent as? ViewGroup)?.removeView(webView)
             webView.destroy()
+            // After destroy(), never before: a partition still in use cannot be
+            // deleted. This is what keeps the ceremony's cookies, storage and
+            // cache from outliving it.
+            SignerProfile.release(profileName)
         }
         super.onDestroy()
     }
@@ -129,6 +136,12 @@ class SignosoftSignerActivity : ComponentActivity() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
+            // Before any load: the partition has to be in place before the
+            // shell writes its first cookie.
+            profileName = SignerProfile.isolate(
+                this,
+                SignerProfile.newName(java.util.UUID.randomUUID().toString()),
+            )
             webViewClient = SignerWebViewClient()
             webChromeClient = SignerWebChromeClient()
             addJavascriptInterface(
@@ -258,9 +271,9 @@ class SignosoftSignerActivity : ComponentActivity() {
                 spinner.visibility = android.view.View.GONE
             }
             "signed" ->
-                finish(SignosoftSignerResult.Signed(SignedInfo.fromBridge(message.data, pdfStore)))
+                finishWithInfo(message.data, SignosoftSignerResult::Signed)
             "rejected" ->
-                finish(SignosoftSignerResult.Rejected(SignedInfo.fromBridge(message.data, pdfStore)))
+                finishWithInfo(message.data, SignosoftSignerResult::Rejected)
             "cancelled" -> finish(SignosoftSignerResult.Cancelled)
             "error" -> finish(
                 SignosoftSignerResult.Failed(
@@ -270,6 +283,31 @@ class SignosoftSignerActivity : ComponentActivity() {
                 )
             )
         }
+    }
+
+    /**
+     * Every other field of [SignedInfo] may safely default — losing a signer's
+     * middle name must not lose a signature. `documentToken` may not: it is the
+     * only handle the host has on the document, and a blank one turns a
+     * completed ceremony into a backend call for nothing. Better a loud failure
+     * than a hollow success. The Swift core does the same.
+     */
+    private fun finishWithInfo(
+        data: Map<String, Any?>?,
+        makeResult: (SignedInfo) -> SignosoftSignerResult,
+    ) {
+        val info = SignedInfo.fromBridge(data, pdfStore)
+        if (info.documentToken.isEmpty()) {
+            finish(
+                SignosoftSignerResult.Failed(
+                    SignosoftErrorCode.SESSION_FAILED,
+                    "The signing shell reported an outcome with no documentToken, " +
+                        "so the document cannot be identified.",
+                )
+            )
+            return
+        }
+        finish(makeResult(info))
     }
 
     private fun finish(result: SignosoftSignerResult) {

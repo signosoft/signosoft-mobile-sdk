@@ -20,6 +20,16 @@ of resolving to `Failed(unsupportedPlatform)`.
 
 ### Fixed
 
+- **Android: ceremony data no longer outlives the ceremony.** Each ceremony runs
+  in its own WebView storage partition, deleted when it ends — the same
+  guarantee iOS has always made with a non-persistent data store. Your app's own
+  WebView storage is never touched. Needs WebView 114 or newer, which is a
+  provider question rather than a `minSdk` one; where absent, the ceremony uses
+  the host's default storage as before. Because nothing is cached between
+  ceremonies, every ceremony re-downloads the signing shell on both platforms.
+- **Android: an outcome with an empty `documentToken` now resolves to
+  `Failed(sessionFailed)`**, not `Signed`. This is what the API documented and
+  what iOS already did; only Android disagreed.
 - **Android: the signer's WebView is now detached before it is destroyed.**
   Destroying an attached WebView is undefined behaviour on Android and could
   take the renderer down under the compositor during teardown.

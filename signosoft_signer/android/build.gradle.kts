@@ -76,6 +76,7 @@ dependencies {
     // Compiling the core's sources means carrying the core's dependencies.
     implementation("androidx.activity:activity:1.11.0")
     implementation("androidx.core:core:1.17.0")
+    implementation("androidx.webkit:webkit:1.14.0")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.junit.jupiter:junit-jupiter:5.14.4")

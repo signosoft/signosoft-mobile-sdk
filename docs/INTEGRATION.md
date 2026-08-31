@@ -547,7 +547,7 @@ cheap to log. Native hosts get the same tap via
 | `invalidBaseUrl`, before the signer ever appears | `baseUrl` is not an `https://` origin with a host: a typo, a scheme-less string, or a plain-`http://` origin that is not loopback | use `https://`. Plain `http://` is accepted only for `localhost`, `*.localhost`, `127.0.0.1`, `::1` and `10.0.2.2`. The reason it is refused rather than attempted: a cleartext page is not a *secure context*, so WebCrypto does not exist there and the shell — which needs it to encrypt biometric data — could never complete a signature. Earlier releases loaded such an origin and failed later with `crypto.subtle is undefined` |
 | `loadTimeout` after a blank screen for the whole timeout | nothing is listening on that host and port, or something accepts the connection and never serves the shell. A refused connection is **not** reported as `loadFailed` — WebKit does not hand us a failure for it, so the watchdog is what ends the wait | check the shell is running and reachable **from the device**, not just from the Mac. From the Android emulator the host machine is `10.0.2.2`, never `localhost`. Measured on 2026-08-18 against a closed port on loopback: 45 s of spinner, then `loadTimeout` |
 | `sessionFailed`, "The document link is invalid" | the `bioid` is unknown or malformed, or expired — the server reports `DOC_LINK_NOT_EXIST` | mint a fresh token. Note this is **not** the already-signed case: a token whose signature completed opens normally and reports `Cancelled` when closed |
-| `sessionFailed` / `DOC_LINK_NOT_EXIST` on a token you are sure is good, on a simulator or emulator you have run this app on before | stale WebKit storage from an earlier install made the shell resolve an empty `docLink`, and the server answers that with the same reason code it uses for a dead token — indistinguishable from the outside, which is what makes it expensive | `xcrun simctl uninstall <udid> <your bundle id>`, or `adb uninstall <your application id>`, and run again; reinstalling over the top does not clear it. Observed before each ceremony was given its own non-persistent WebView store, which should remove the cause — that has not been re-tested, so the uninstall is still the cheap first check |
+| `sessionFailed` / `DOC_LINK_NOT_EXIST` on a token you are sure is good, on a simulator or emulator you have run this app on before | stale WebKit storage from an earlier install made the shell resolve an empty `docLink`, and the server answers that with the same reason code it uses for a dead token — indistinguishable from the outside, which is what makes it expensive | `xcrun simctl uninstall <udid> <your bundle id>`, or `adb uninstall <your application id>`, and run again; reinstalling over the top does not clear it. Observed before each ceremony was given its own storage partition — non-persistent on iOS, a per-ceremony WebView profile on Android — which should remove the cause on both platforms. It has not been reproduced since, but neither has it been deliberately re-tested, so the uninstall is still the cheap first check |
 | A **handwritten (signature-pad)** field shows **"Connection error."** and *Confirm Signature* never enables | the signature-pad driver is licensed per origin, and `https://www.signosoft.com` is not on the licence's origin allowlist, so the driver refuses to initialise. Server-side licence configuration — **not** the SDK, the WebView or the device: it reproduces in a desktop browser at the same origin, and the same document signs from an allowlisted origin | use a **typed** signature field and its *Draw* tab, which takes a finger-drawn signature and completes normally. To use pad fields, ask Signosoft to add your `baseUrl` origin to the licence allowlist, or to serve the shell from an origin already on it — `baseUrl` is an `open()` argument, so neither needs a code change on your side |
 | `loadTimeout` on the **first** ceremony on an Android emulator; later opens work but still take 15–20 s | the emulator's network stack, not the SDK and not the device. The shell needs roughly 35–50 requests to become interactive, and inside the emulator each one costs about **1 s** by hostname (167–660 ms by IP literal, plus 300–500 ms of DNS) against about **50 ms** from the host Mac. Measured 2026-08-26: WebView native was up 0.1–0.4 s after the activity started in every run, the renderer used only 2.35 s of CPU across a 20 s load, and a warm open moved 1.95 MB — about 0.5 s of transfer inside a 15–18 s wait. It is round-trip bound, not CPU, bandwidth, GPU or WebView startup | open the ceremony again — the token is untouched, since only a terminal outcome spends one. A host that expects these conditions can pass a longer `loadTimeout` to `open()`. Nothing here has been observed on real hardware, where per-request latency is ordinary |
 | The ceremony opens on a document that is **already signed**, and closing it reports `Cancelled` | the token was reused. In the demo apps `BIOID` is a `--dart-define`, so it is compiled into the build: relaunching the installed app replays the same token rather than picking up a new one | rebuild and run with a freshly minted token. This is not a bug — an already-signed `bioid` opens normally by design (see [§5](#5-the-four-outcomes)) |
@@ -580,27 +580,38 @@ per app, not per SDK, so **you** declare the same collection there: name, email
 address and user content, collected and not shared, for app functionality. The
 SDK adds no permission to your manifest and no analytics or tracking of any kind.
 
-### The two platforms store ceremony data differently
+### Ceremony data does not outlive the ceremony
 
-**iOS keeps nothing.** Each ceremony gets a fresh non-persistent
-`WKWebsiteDataStore`, so cookies, local storage and the HTTP cache live only as
-long as the signer is on screen.
+**iOS.** Each ceremony gets a fresh non-persistent `WKWebsiteDataStore`, so
+cookies, local storage and the HTTP cache live only as long as the signer is on
+screen.
 
-**Android currently keeps everything.** The ceremony runs in the host app's
-default WebView profile, so the shell's cookies, local storage and cached assets
-persist in your app's data directory after the signer closes, and are shared with
-any other WebView in your app. Two consequences worth knowing:
+**Android.** Each ceremony gets its own WebView *profile* — a named storage
+partition with its own cookies, local storage and cache — which is deleted when
+the ceremony ends. A partition orphaned by a process killed mid-ceremony is
+collected when the next ceremony starts, so they cannot accumulate. Your app's
+own WebView storage is never touched.
 
-- Data from a signing session outlives the session. If your threat model or your
-  Data safety answers assume otherwise, clear it yourself — `WebStorage` and
-  `CookieManager` are the host-side handles.
-- It is the condition behind the stale-cache `DOC_LINK_NOT_EXIST` symptom in the
-  [troubleshooting table](#8-troubleshooting), which the iOS store change was
-  made to remove.
+The reason Android needed a profile rather than a cleanup call is worth knowing,
+because it constrains what you should do too: `CookieManager`, `WebStorage` and
+`WebView.clearCache` are **process wide**. An SDK that called them to tidy up
+after itself would delete *your* WebView data as well. Partitioning is the only
+mechanism that isolates without collateral damage.
 
-This divergence is **known and not yet resolved** — it is called out here rather
-than quietly left for you to discover. The Android side is faster on repeat opens
-because of it.
+**One caveat on Android.** Profiles need WebView **114 or newer**. That is not a
+`minSdk` question — the WebView provider updates through the Play Store,
+independently of the OS — so a device on API 34 with an old, never-updated
+WebView can still lack it. Where it is missing the ceremony runs in your app's
+default WebView storage, exactly as it did before this release, and its cookies
+and cache will outlive it. If that matters for your threat model, gate on it:
+`SignosoftSigner.isStorageIsolationAvailable()` reports it.
+
+Either way this has a cost worth planning around: because nothing is cached
+between ceremonies, **every ceremony re-downloads the signing shell**. Measured
+on 2026-08-26, two consecutive Android ceremonies transferred 3733 KB and
+3728 KB — before isolation the second reused its cache. iOS has always behaved
+this way. On a slow connection this makes the load watchdog more likely to fire
+on any ceremony, not just the first.
 
 ---
 
@@ -615,10 +626,16 @@ not gated, because the examples are not shipped as part of the package.
 | Swift core, macOS | `swift test` in `ios/` | 21, of which **1 skipped** | yes | bridge-message decoding, `SignedInfo` field mapping, `baseUrl` origin validation, the signed-PDF store (size ceiling, path-escape, bad input) |
 | Swift, iOS Simulator | `xcodebuild test -scheme SignosoftSigner -destination "platform=iOS Simulator,id=<udid>"` in `ios/` | 51, of which **1 skipped** (the 21 above **plus 30** simulator-only) | yes | the view-controller layer: WebView setup, bridge dispatch, the load-timeout watchdog, the HTTP-error path, `invalidBaseUrl` rejection before load, teardown reporting `Cancelled`, that signed-PDF bytes never reach the diagnostic tap, and that no error message carries the `bioid` |
 | Dart plugin | `flutter analyze && flutter test` in `signosoft_signer/` | 23 | yes | the public API and the method-channel wire format: every outcome, every error code, empty token, null reply, an unsupported platform, diagnostics, and that `open()` returns rather than throws |
-| Kotlin core | `./gradlew test` in `android/` | 23 | yes | bridge-message parsing, `SignedInfo` field coercion, the signed-PDF store (size ceiling, path-escape, bad input), the error-code wire format pinned against Swift and Dart, and — under Robolectric — the signing activity itself: back reports `Cancelled`, an unusable `baseUrl` and an empty token fail before the shell is opened, no error message carries the `bioid`, and the WebView is detached before it is destroyed |
+| Kotlin core | `./gradlew test` in `android/` | 43 | yes | bridge-message parsing, `SignedInfo` field coercion, the signed-PDF store (size ceiling, path-escape, bad input), the error-code wire format pinned against Swift and Dart, and — under Robolectric — the signing activity: every bridge outcome, `ready` as non-terminal, unknown and malformed payloads, that only the first terminal event is reported, the load watchdog firing and being cancelled, that the signed PDF never reaches the diagnostic tap as bytes, that no diagnostic or error message carries the `bioid`, the `createIntent`/`parseResult` contract, and that the WebView is detached before it is destroyed |
 | Kotlin plugin | `./gradlew :signosoft_signer:testDebugUnitTest` in `examples/medicly/android/` | 3 | yes | the method-channel payload the Dart side reads: the signed keys, a null local PDF, and the timeout fallback |
 | Demo host app | `flutter test` in `examples/medicly/` | 6 | no | the reference app lays out with no overflow and keeps the Sign button reachable at phone and tablet widths |
 | Bare example | `flutter test` in `signosoft_signer/example/` | 5 | no | the minimal host: all four outcomes render, and Sign stays disabled without a token |
+
+CI also asserts that the Flutter plugin declares every dependency the Kotlin
+core does. The plugin compiles the core's sources out of the sibling directory
+but keeps its own dependency list, so a dependency added to one and not the
+other breaks only the Flutter build, long after the core's own tests pass —
+which is exactly how it broke once during this release.
 
 Swift and example counts measured on 2026-08-18; Dart and Kotlin counts on
 2026-08-26. CI additionally runs `dart format --set-exit-if-changed` over the
@@ -717,6 +734,10 @@ Tablet emulator (both API 36, `google_apis`, arm64) against
   with a JSON **string** payload is what the hosted shell actually calls, and the
   Kotlin `@JavascriptInterface` reads it. `ready` and `signed` both arrived
 - `Cancelled` from the **system back button**
+- **storage isolation**: the ceremony ran in its own WebView partition, the
+  host's default partition was untouched, and two consecutive ceremonies each
+  re-downloaded the shell in full (3733 KB and 3728 KB) rather than sharing a
+  cache — the same guarantee iOS makes
 - **the tablet form factor**: 2560×1600 landscape at 320 dpi. The demo host
   switches to its two-column width class, and the ceremony, the signature dialog
   and the `loadTimeout` error state all lay out correctly at that size

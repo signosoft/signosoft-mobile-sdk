@@ -64,6 +64,21 @@ object SignosoftSigner {
         return signerResultFromBundle(intent?.getBundleExtra(EXTRA_RESULT))
     }
 
+    /**
+     * Whether this device's WebView can give the ceremony its own storage
+     * partition, so that its cookies, local storage and cache do not outlive it
+     * and are not shared with the host app's other WebViews.
+     *
+     * True on WebView 114 and newer. That is not a `minSdk` question — the
+     * WebView provider updates through the Play Store, independently of the OS
+     * — so a recent Android version is not on its own a guarantee. Where this
+     * is false the ceremony runs in the host app's default WebView storage and
+     * its data outlives the ceremony; the alternative would be deleting the
+     * host's data too, which the SDK will not do. See the integration guide's
+     * privacy section.
+     */
+    fun isStorageIsolationAvailable(): Boolean = SignerProfile.isSupported
+
     /** A base URL the WebView cannot load is reported before anything opens. */
     internal fun isUsableBaseUrl(baseUrl: Uri): Boolean =
         !baseUrl.scheme.isNullOrEmpty() && !baseUrl.host.isNullOrEmpty()
