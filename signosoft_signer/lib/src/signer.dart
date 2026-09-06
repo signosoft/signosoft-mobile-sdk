@@ -27,6 +27,8 @@ abstract final class SignosoftSigner {
   ///
   /// [loadTimeout] bounds how long the shell may take to become interactive
   /// before the session gives up with [SignosoftErrorCode.loadTimeout].
+  /// Defaults to 120 seconds: every ceremony re-downloads the shell, and 45
+  /// seconds was firing on a reachable origin.
   ///
   /// [onDiagnostic] receives raw bridge messages; it is for debugging an
   /// integration, not for product logic. A callback that throws cannot affect
@@ -42,7 +44,7 @@ abstract final class SignosoftSigner {
   static Future<SignosoftSignResult> open({
     required String token,
     required Uri baseUrl,
-    Duration loadTimeout = const Duration(seconds: 45),
+    Duration loadTimeout = const Duration(seconds: 120),
     void Function(SignosoftDiagnostic diagnostic)? onDiagnostic,
   }) {
     if (defaultTargetPlatform != TargetPlatform.iOS &&

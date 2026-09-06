@@ -18,7 +18,12 @@ public final class SignosoftSignerViewController: UIViewController {
     static let privacyCoverIdentifier = "signosoft.privacyCover"
 
     /// How long the shell may take to report itself ready.
-    public static let defaultLoadTimeout: TimeInterval = 45
+    ///
+    /// 45s was enough when a warm WebView cache served the shell; it is not,
+    /// now that every ceremony starts with an empty store and re-downloads it.
+    /// Measured 2026-08-31: an iOS Simulator first open reached `ready` at
+    /// ~100s after a 45s timeout had already fired.
+    public static let defaultLoadTimeout: TimeInterval = 120
 
     private let token: String
     private let baseURL: URL

@@ -39,7 +39,12 @@ data class SignosoftSignerRequest(
  */
 object SignosoftSigner {
     /** How long the shell may take to report itself ready. */
-    const val DEFAULT_LOAD_TIMEOUT_MILLIS = 45_000L
+    /** How long the shell may take to report itself ready.
+     *
+     * 45s was enough when a warm WebView cache served the shell; it is not,
+     * now that every ceremony starts in an empty storage partition and
+     * re-downloads it. iOS has always behaved that way. */
+    const val DEFAULT_LOAD_TIMEOUT_MILLIS = 120_000L
 
     internal const val EXTRA_TOKEN = "com.signosoft.signer.TOKEN"
     internal const val EXTRA_BASE_URL = "com.signosoft.signer.BASE_URL"
