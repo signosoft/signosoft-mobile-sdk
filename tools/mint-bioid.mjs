@@ -24,16 +24,20 @@ const PDF = resolve(here, '../examples/medicly/assets/mock-medical-report.pdf');
 // 1 — the same numbers the web app sends. PDF points here would land off-page,
 // and the server renders an off-page field on a page of its own.
 //
-// Exactly **one** field, and it must be `simple`. One field per document is the
-// shape the SDK is built around, and `simple` is the method that completes — the ceremony
-// completes the first field and the host app never receives a terminal result.
-// And `biometric` needs an external hardware signature pad that cannot be
-// reached from this origin. One typed field is the only shape that completes
-// end to end. Centred on the span the old `simple` + `biometric` pair covered
-// (51-89, midpoint 70, so an 18-wide field starts at 61).
-const FIELDS = [
+// Two `simple` (typed) fields, same geometry as the original mint. Both are
+// `simple` because `biometric` needs a hardware pad this origin cannot reach.
+// Default used to be one field: the ceremony auto-finalises on the last
+// *required* field, and two fields had never been driven to a terminal
+// `Signed`. `--fields=1` restores that shape.
+const ONE_FIELD = [
   { authmethod: 'simple', x: 61, y: 60, width: 18, height: 6 },
 ];
+const TWO_FIELDS = [
+  { authmethod: 'simple', x: 51, y: 60, width: 18, height: 6 },
+  { authmethod: 'simple', x: 71, y: 60, width: 18, height: 6 },
+];
+const fieldCount = process.argv.includes('--fields=1') ? 1 : 2;
+const FIELDS = fieldCount === 1 ? ONE_FIELD : TWO_FIELDS;
 
 // ---------------------------------------------------------------------------
 

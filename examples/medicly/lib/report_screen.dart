@@ -250,15 +250,9 @@ class _SidePanel extends StatelessWidget {
                     icon: Icons.description_outlined,
                     label: 'mock-medical-report.pdf',
                   ),
-                  // One field, and typed on purpose. One field per document is the
-                  // signature, so a second field could never be signed with the
-                  // same token; and a `biometric` field needs an external
-                  // signature pad the shell cannot reach from this origin. Say
-                  // what the document holds rather than let a demo viewer find
-                  // out by tapping.
                   const _MetaRow(
                     icon: Icons.edit_outlined,
-                    label: '1 signature field — typed',
+                    label: 'Typed signature fields',
                   ),
                   const _MetaRow(
                     icon: Icons.verified_user_outlined,

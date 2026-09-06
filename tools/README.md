@@ -10,7 +10,8 @@ Prints a fresh `bioid` — a document-link token you can hand to
 `SignosoftSigner.open()`:
 
 ```bash
-node tools/mint-bioid.mjs
+node tools/mint-bioid.mjs            # two typed fields
+node tools/mint-bioid.mjs --fields=1 # one typed field
 ```
 
 Progress goes to stderr, the token alone to stdout, so it composes:
@@ -31,7 +32,7 @@ signature:
 | Call | Result |
 |---|---|
 | `REST/uploadDocument` | uploads `examples/medicly/assets/mock-medical-report.pdf`; returns `docid` + `doctoken` |
-| `REST/saveSignatures` | places one `simple` (typed) field, centred on the page. One field per document is the shape the SDK is built around; the typed field’s *Draw* tab is what captures a handwritten signature |
+| `REST/saveSignatures` | places two `simple` (typed) fields side by side. `--fields=1` restores the single centred field this release was previously tested against |
 | `REST/createSignRequest` | moves the document to *ready to sign* |
 | `REST/createDocLink` | **the `bioid`** |
 
@@ -53,7 +54,7 @@ survives many attempts.
 
 ### Field placement
 
-`FIELDS` at the top of the script. **Coordinates are percentages of the page**,
+`FIELDS` at the top of the script (two typed fields by default; `--fields=1` for one). **Coordinates are percentages of the page**,
 top-left origin, page 1. Not a guess: a field placed by hand in the web app comes
 back from `getUserDocuments` as
 `{"page":1,"x":55.87,"y":51.54,"w":17.19,"h":6.66}`. Send PDF points instead and
